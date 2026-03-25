@@ -73,10 +73,20 @@ class SharePointService:
 
 
 class TeamsService:
-    """Send Teams direct messages via Graph API."""
+    """Post to Teams channels via Graph API."""
 
     def __init__(self, client: GraphClient):
         self._client = client
+
+    def post_to_channel(self, team_id: str, channel_id: str, message: str):
+        """Post a message to a Teams channel."""
+        try:
+            url = f"{GRAPH_BASE}/teams/{team_id}/channels/{channel_id}/messages"
+            self._client._post(url, json={"body": {"content": message}})
+            log.info("Teams channel message posted successfully")
+        except Exception as e:
+            log.error("Failed to post to Teams channel: %s", e)
+            raise
 
     def send_dm(self, to_email: str, message: str):
         """Send a Teams DM to a user by their email/UPN."""

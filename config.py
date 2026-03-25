@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     SHAREPOINT_FILE_ID: str = "3412E7C8-7761-4233-B87D-384885821FEE"
     SHAREPOINT_SHEET: str = "Sheet1"
 
+    # Teams (for flip notifications)
+    TEAMS_TEAM_ID: str = ""  # WFS PO Flip Tool team
+    TEAMS_CHANNEL_ID: str = ""  # alerts channel
+
     # SharePoint column indices (1-based)
     SP_COL_AM: str = "B"       # Who submitted
     SP_COL_APPROVED: str = "T" # Y / N

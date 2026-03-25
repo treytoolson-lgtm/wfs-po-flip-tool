@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 import app.database as db
 from app.routes import escalation, monitor, po_flip
+from app.services.teams_notifier import post_teams_notification
 from config import get_settings
 
 logging.basicConfig(
