@@ -23,7 +23,35 @@
         };
     </script>
     <style>
-        body { font-family: "Bogle", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+        /* Myriad Pro font stack */
+        body { 
+            font-family: "Myriad Pro", "Myriad", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; 
+        }
+        
+        /* The Spark "Breathe & Spin" Animation */
+        @keyframes spark-breathe {
+            0% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(180deg) scale(0.6); }
+            100% { transform: rotate(360deg) scale(1); }
+        }
+        
+        .animate-spin-spark {
+            animation: spark-breathe 3s ease-in-out infinite;
+            transform-origin: center; /* Ensures it spins around its middle */
+        }
+        
+        .text-wmt-yellow {
+            color: #ffc220;
+        }
+        
+        /* Hide loading spark by default */
+        .htmx-request .loading-spark {
+            display: inline-block;
+        }
+        
+        .loading-spark {
+            display: none;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -31,9 +59,17 @@
     <nav class="bg-walmart-blue text-white shadow-lg">
         <div class="container mx-auto px-6 py-4 flex items-center justify-between">
             <div class="flex items-center space-x-2">
-                <div class="w-10 h-10 bg-walmart-spark rounded-full flex items-center justify-center text-walmart-blue font-black text-xl">
-                    *
-                </div>
+                <!-- Walmart Spark Icon -->
+                <svg class="h-10 w-10 text-walmart-spark" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                    <g>
+                        <rect x="11" y="1" width="2" height="8" rx="1" />
+                        <rect x="11" y="1" width="2" height="8" rx="1" transform="rotate(60 12 12)" />
+                        <rect x="11" y="1" width="2" height="8" rx="1" transform="rotate(120 12 12)" />
+                        <rect x="11" y="1" width="2" height="8" rx="1" transform="rotate(180 12 12)" />
+                        <rect x="11" y="1" width="2" height="8" rx="1" transform="rotate(240 12 12)" />
+                        <rect x="11" y="1" width="2" height="8" rx="1" transform="rotate(300 12 12)" />
+                    </g>
+                </svg>
                 <div>
                     <div class="font-bold text-lg">WFS Escalation + PO Flip</div>
                     <div class="text-xs text-blue-200">Trailer Ops Intelligence</div>

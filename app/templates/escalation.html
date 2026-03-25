@@ -37,7 +37,19 @@
             <button type="submit" class="mt-4 bg-walmart-blue hover:bg-walmart-blue-hover text-white font-bold py-3 px-8 rounded-lg transition">
                 Run Analysis
             </button>
-            <span id="spinner" class="htmx-indicator ml-4 text-gray-500">⌛ Querying BQ...</span>
+            <span id="spinner" class="htmx-indicator ml-4 inline-flex items-center space-x-2">
+                <svg class="animate-spin-spark h-6 w-6 text-wmt-yellow" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                    <g>
+                        <rect x="11" y="1" width="2" height="8" rx="1" />
+                        <rect x="11" y="1" width="2" height="8" rx="1" transform="rotate(60 12 12)" />
+                        <rect x="11" y="1" width="2" height="8" rx="1" transform="rotate(120 12 12)" />
+                        <rect x="11" y="1" width="2" height="8" rx="1" transform="rotate(180 12 12)" />
+                        <rect x="11" y="1" width="2" height="8" rx="1" transform="rotate(240 12 12)" />
+                        <rect x="11" y="1" width="2" height="8" rx="1" transform="rotate(300 12 12)" />
+                    </g>
+                </svg>
+                <span class="text-gray-600 font-medium">Querying BigQuery...</span>
+            </span>
         </form>
     </div>
 
