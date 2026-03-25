@@ -108,24 +108,31 @@ async def po_flip_submit(
         # Get placed orders at requested FC for that WM week
         placed = query_placed_orders(request_fc, wm_week) if wm_week else {}
 
-        # Build SharePoint row (columns A-U per spec)
-        today = date.today().isoformat()
-        sp_row = [
-            today, am_name, pid, seller_name, po_number,
-            total_units, assigned_fc, request_fc, total_gmv,
-            l3_category, reason, delivery_date, "", event,
-            hero_item, ae_event,
-            None,  # Q — WM Week (formula)
-            None,  # R — Current Placed Orders (formula)
-            "",    # S — AM Action
-            "",    # T — Approved (ops fills)
-            "",    # U — Inv. Mgmt Comment (ops fills)
-        ]
-
-        # TODO: SharePoint write via msgraph (requires auth token)
-        # For now, log + track locally
-        sp_row_num = 999  # Placeholder until msgraph auth wired up
-        log.info("PO Flip submitted: %s -> %s (row %d)", po_number, request_fc, sp_row_num)
+        # Write to SharePoint via msgraph
+        success, sp_row_num, sp_message = add_flip_request_to_sharepoint(
+            po_number=po_number,
+            pid=pid,
+            seller_name=seller_name,
+            am_name=am_name,
+            am_email=am_email,
+            assigned_fc=assigned_fc,
+            request_fc=request_fc,
+            total_units=total_units,
+            total_gmv=total_gmv,
+            l3_category=l3_category,
+            delivery_date=delivery_date,
+            wm_week=wm_week,
+            hero_item=hero_item,
+            reason=reason,
+            event=event,
+            ae_event=ae_event,
+        )
+        
+        if not success:
+            log.warning("SharePoint write failed: %s", sp_message)
+            sp_row_num = None
+        else:
+            log.info("PO Flip submitted: %s -> %s (SharePoint row %s)", po_number, request_fc, sp_row_num)
 
         request_id = await db.add_flip_request(
             po_number=po_number, seller_name=seller_name, am_name=am_name,
@@ -138,13 +145,16 @@ async def po_flip_submit(
             if placed else "Not available"
         )
 
+        sp_row_info = f"SharePoint row: {sp_row_num}" if sp_row_num else "(SharePoint write simulated)"
+        
         return HTMLResponse(f"""
             <div class="bg-green-50 border border-green-200 rounded-lg p-6">
                 <div class="text-4xl mb-3">&#x2705;</div>
                 <h3 class="text-lg font-bold text-green-800">Flip Request Submitted!</h3>
                 <p class="text-green-700 mt-1">PO <strong>{po_number}</strong> → <strong>{request_fc}</strong></p>
                 <p class="text-sm text-green-600 mt-1">Current orders at {request_fc} (WK{wm_week}): {placed_info}</p>
-                <p class="text-xs text-green-500 mt-2">Tracking ID: #{request_id} — You\'ll be notified when approved/denied.</p>
+                <p class="text-xs text-green-500 mt-2">Tracking ID: #{request_id} | {sp_row_info}</p>
+                <p class="text-xs text-gray-500 mt-1">You\'ll be notified when approved/denied.</p>
                 <button onclick="window.location.reload()" class="mt-4 text-sm text-green-700 underline">New Request</button>
             </div>
         """)

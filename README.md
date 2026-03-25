@@ -24,7 +24,8 @@ Consolidates **Seller Center + Scheduler 2.0 + Tableau TUP** into one FastAPI + 
 - ✅ Dashboard shows all flip requests with status badges
 - ✅ Scheduled polling configured (9am/1pm/5pm EST)
 - ✅ Teams channel created: "WFS PO Flip Tool" #alerts
-- ⚠️ SharePoint read + Teams posting: Needs Azure AD app auth (see below)
+- ✅ Teams notification logic complete (logs for now)
+- 💡 See `docs/SHAREPOINT_INTEGRATION.md` for enabling real SharePoint reads
 
 ---
 
