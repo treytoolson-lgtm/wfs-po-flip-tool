@@ -1,0 +1,91 @@
+<form hx-post="/po-flip/submit" hx-target="#submit-result" hx-indicator="#submit-spinner" class="space-y-4">
+    <div class="grid grid-cols-2 gap-4">
+        <div>
+            <label class="block font-semibold text-gray-700 mb-1">PO Number</label>
+            <input type="text" name="po_number" value="{{ po_number }}" readonly class="w-full border rounded p-2 bg-gray-100" />
+        </div>
+        <div>
+            <label class="block font-semibold text-gray-700 mb-1">PID</label>
+            <input type="text" name="pid" value="{{ pid }}" readonly class="w-full border rounded p-2 bg-gray-100" />
+        </div>
+        <div>
+            <label class="block font-semibold text-gray-700 mb-1">Seller Name</label>
+            <input type="text" name="seller_name" value="{{ seller_name }}" readonly class="w-full border rounded p-2 bg-gray-100" />
+        </div>
+        <div>
+            <label class="block font-semibold text-gray-700 mb-1">AM Name</label>
+            <input type="text" name="am_name" value="{{ am_name }}" readonly class="w-full border rounded p-2 bg-gray-100" />
+        </div>
+        <div>
+            <label class="block font-semibold text-gray-700 mb-1">AM Email</label>
+            <input type="email" name="am_email" value="{{ am_email }}" readonly class="w-full border rounded p-2 bg-gray-100" />
+        </div>
+        <div>
+            <label class="block font-semibold text-gray-700 mb-1">Assigned FC</label>
+            <input type="text" name="assigned_fc" value="{{ assigned_fc }}" readonly class="w-full border rounded p-2 bg-gray-100" />
+        </div>
+        <div>
+            <label class="block font-semibold text-gray-700 mb-1">Units</label>
+            <input type="number" name="total_units" value="{{ total_units }}" readonly class="w-full border rounded p-2 bg-gray-100" />
+        </div>
+        <div>
+            <label class="block font-semibold text-gray-700 mb-1">PO GMV</label>
+            <input type="number" step="0.01" name="total_gmv" value="{{ total_gmv }}" readonly class="w-full border rounded p-2 bg-gray-100" />
+        </div>
+        <div>
+            <label class="block font-semibold text-gray-700 mb-1">Key Assortment / L3</label>
+            <input type="text" name="l3_category" value="{{ l3_category }}" readonly class="w-full border rounded p-2 bg-gray-100" />
+        </div>
+        <div>
+            <label class="block font-semibold text-gray-700 mb-1">Delivery Date</label>
+            <input type="text" name="delivery_date" value="{{ delivery_date }}" readonly class="w-full border rounded p-2 bg-gray-100" />
+        </div>
+        <div>
+            <label class="block font-semibold text-gray-700 mb-1">WM Week</label>
+            <input type="number" name="wm_week" value="{{ wm_week }}" readonly class="w-full border rounded p-2 bg-gray-100" />
+        </div>
+        <div>
+            <label class="block font-semibold text-gray-700 mb-1">Hero Item</label>
+            <input type="text" name="hero_item" value="{{ hero_item }}" readonly class="w-full border rounded p-2 bg-gray-100" />
+        </div>
+    </div>
+
+    <div class="border-t pt-4 mt-6">
+        <h3 class="font-bold text-lg text-green-700 mb-4">Flip Request Details (Your Input):</h3>
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <label class="block font-semibold text-gray-700 mb-1">Request FC <span class="text-red-600">*</span></label>
+                <select name="request_fc" required class="w-full border-2 border-green-500 rounded p-2">
+                    <option value="">-- Select FC --</option>
+                    {% for fc in wfs_fcs %}
+                    <option value="{{ fc }}">{{ fc }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block font-semibold text-gray-700 mb-1">Event (if applicable)</label>
+                <input type="text" name="event" placeholder="Summer Event, etc." class="w-full border rounded p-2" />
+            </div>
+            <div>
+                <label class="block font-semibold text-gray-700 mb-1">AE Event? <span class="text-red-600">*</span></label>
+                <select name="ae_event" required class="w-full border rounded p-2">
+                    <option value="N">No</option>
+                    <option value="Y">Yes</option>
+                </select>
+            </div>
+        </div>
+        <div class="mt-4">
+            <label class="block font-semibold text-gray-700 mb-1">Reason for Flip <span class="text-red-600">*</span></label>
+            <textarea name="reason" rows="3" required class="w-full border-2 border-green-500 rounded p-2" placeholder="Explain why this PO needs to flip..."></textarea>
+        </div>
+    </div>
+
+    <div class="flex justify-end mt-6">
+        <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-12 rounded-lg transition">
+            Submit Flip Request
+        </button>
+    </div>
+    <span id="submit-spinner" class="htmx-indicator block mt-2 text-gray-500">⌛ Submitting...</span>
+</form>
+
+<div id="submit-result" class="mt-6"></div>

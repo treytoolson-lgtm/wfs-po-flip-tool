@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Escalation Lookup{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <h1 class="text-3xl font-bold text-walmart-blue mb-6">Mode 1: Escalation Lookup</h1>
+
+    <div class="bg-white rounded-lg shadow-lg p-8">
+        <p class="text-gray-700 mb-6">
+            Enter one or more <strong>WFA PO numbers</strong> (comma or newline separated).
+            The tool will query BigQuery and apply escalation logic:
+        </p>
+
+        <div class="bg-blue-50 border-l-4 border-walmart-blue p-4 mb-6 text-sm">
+            <strong class="text-walmart-blue">Escalation Criteria:</strong>
+            <ul class="mt-2 space-y-1 text-gray-700">
+                <li>✅ Hero/Mosaic item + WOS < {{wos_threshold|default(2.0)}} weeks</li>
+                <li>✅ Trailer has arrived (not scheduled)</li>
+                <li>✅ Full truck/container (not LTL/small parcel)</li>
+                <li>⚠️ Borderline: Hero item but WOS 2.0-2.5 weeks</li>
+                <li>❌ Do NOT escalate: LTL, not arrived, or non-hero with healthy stock</li>
+            </ul>
+        </div>
+
+        <form hx-post="/escalation/lookup" hx-target="#results" hx-indicator="#spinner">
+            <label for="po_input" class="block font-semibold text-gray-800 mb-2">PO Number(s):</label>
+            <textarea
+                id="po_input"
+                name="po_input"
+                rows="4"
+                class="w-full border-2 border-gray-300 rounded-lg p-3 focus:border-walmart-blue focus:outline-none"
+                placeholder="6577303WFA, 6491311WFA, ..."
+                required
+            ></textarea>
+
+            <button type="submit" class="mt-4 bg-walmart-blue hover:bg-walmart-blue-hover text-white font-bold py-3 px-8 rounded-lg transition">
+                Run Analysis
+            </button>
+            <span id="spinner" class="htmx-indicator ml-4 text-gray-500">⌛ Querying BQ...</span>
+        </form>
+    </div>
+
+    <!-- Results Container -->
+    <div id="results" class="mt-8"></div>
+</div>
+{% endblock %}

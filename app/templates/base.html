@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}WFS Escalation Tool{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        walmart: {
+                            blue: '#0053e2',
+                            spark: '#ffc220',
+                            'blue-hover': '#0046c7',
+                            'blue-pressed': '#00389f',
+                        },
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        body { font-family: "Bogle", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Nav -->
+    <nav class="bg-walmart-blue text-white shadow-lg">
+        <div class="container mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <div class="w-10 h-10 bg-walmart-spark rounded-full flex items-center justify-center text-walmart-blue font-black text-xl">
+                    *
+                </div>
+                <div>
+                    <div class="font-bold text-lg">WFS Escalation + PO Flip</div>
+                    <div class="text-xs text-blue-200">Trailer Ops Intelligence</div>
+                </div>
+            </div>
+            <div class="flex space-x-6 text-sm font-semibold">
+                <a href="/" class="hover:text-walmart-spark transition">Home</a>
+                <a href="/escalation" class="hover:text-walmart-spark transition">Escalation Lookup</a>
+                <a href="/po-flip" class="hover:text-walmart-spark transition">PO Flip Request</a>
+                <a href="/monitor" class="hover:text-walmart-spark transition">Monitor</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Content -->
+    <main class="container mx-auto px-6 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t mt-12 py-6 text-center text-sm text-gray-600">
+        <p>Built with ❤️ for WFS AMs | BQ queries tested 2026-03-25</p>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Flip Status Monitor{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <h1 class="text-3xl font-bold text-purple-700 mb-6">Mode 3: Flip Status Monitor</h1>
+
+    <div class="bg-white rounded-lg shadow-lg p-8">
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <p class="text-gray-700">
+                    Auto-polls SharePoint at <strong>9am, 1pm, 5pm EST</strong> to check for approval/denial.
+                    Teams DMs sent when status changes.
+                </p>
+            </div>
+            <button
+                hx-get="/monitor/refresh"
+                hx-target="#monitor-table"
+                hx-indicator="#refresh-spinner"
+                class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-6 rounded transition"
+            >
+                🔄 Refresh
+            </button>
+            <span id="refresh-spinner" class="htmx-indicator ml-2 text-gray-500">⌛ Loading...</span>
+        </div>
+
+        <!-- Stats -->
+        <div class="grid grid-cols-3 gap-4 mb-8">
+            <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4">
+                <div class="text-2xl font-bold text-yellow-800">{{ pending|length }}</div>
+                <div class="text-sm text-yellow-700">Pending</div>
+            </div>
+            <div class="bg-green-50 border-l-4 border-green-500 p-4">
+                <div class="text-2xl font-bold text-green-800">{{ approved|length }}</div>
+                <div class="text-sm text-green-700">Approved</div>
+            </div>
+            <div class="bg-red-50 border-l-4 border-red-500 p-4">
+                <div class="text-2xl font-bold text-red-800">{{ denied|length }}</div>
+                <div class="text-sm text-red-700">Denied</div>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div id="monitor-table">
+            {% include 'partials/monitor_table.html' %}
+        </div>
+    </div>
+</div>
+{% endblock %}

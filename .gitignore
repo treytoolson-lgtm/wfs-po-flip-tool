@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Env
+.env
+
+# DB — contains PO/AM data, don't commit
+*.db
+
+# Data files
+*.csv
+*.xlsx
+*.xls
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
