@@ -1,11 +1,15 @@
 #!/bin/bash
+# WFS Escalation Tool — startup script (Mac / Linux)
+# Windows users: run these commands manually in your terminal:
+#   .venv\Scripts\activate
+#   uvicorn main:app --port 8765
 set -e
 
 cd "$(dirname "$0")"
 
 echo "🐶 WFS Escalation Tool - Starting up..."
 
-# Activate venv if it exists
+# Activate venv
 if [ -d ".venv" ]; then
     source .venv/bin/activate
 else
@@ -13,14 +17,14 @@ else
     exit 1
 fi
 
-# Check gcloud auth
-if ! "/Users/t0t0ech/Documents/gCloud CLI/google-cloud-sdk/bin/gcloud" auth application-default print-access-token &>/dev/null; then
+# Check gcloud auth — uses PATH (set by config.py or system installer)
+if ! gcloud auth application-default print-access-token &>/dev/null; then
     echo "⚠️  GCloud not authenticated. Run:"
-    echo '    "/Users/t0t0ech/Documents/gCloud CLI/google-cloud-sdk/bin/gcloud" auth application-default login'
+    echo "    gcloud auth application-default login"
     exit 1
 fi
 
 echo "✅ GCloud authenticated"
-echo "🚀 Starting uvicorn on http://localhost:${APP_PORT:-8765}"
+echo "🚀 Starting on http://localhost:${APP_PORT:-8765}"
 
-uvicorn main:app --reload --port "${APP_PORT:-8765}"
+uvicorn main:app --port "${APP_PORT:-8765}"

@@ -1,90 +1,88 @@
-# WFS Escalation + PO Flip Tool - Updated README
+# WFS Escalation + PO Flip Tool
 
-**Built from your 3-hour BQ research session spec (2026-03-25)**
-
-Consolidates **Seller Center + Scheduler 2.0 + Tableau TUP** into one FastAPI + HTMX + Tailwind web app.
-
----
-
-## ✅ What Works RIGHT NOW
-
-### Mode 1: Escalation Lookup ✅ FULLY FUNCTIONAL
-- Enter WFA PO numbers
-- Queries BigQuery with validated SQL (tested 2026-03-25)
-- Returns ESCALATE / BORDERLINE / DON'T with full reasoning
-- Shows Hero/Mosaic items, WOS, trailer status
-
-### Mode 2: PO Flip Request ✅ MOSTLY FUNCTIONAL
-- ✅ Auto-fills all fields from BigQuery
-- ✅ Calculates placed orders at requested FC
-- ✅ Saves to local SQLite database
-- ⚠️ SharePoint write: Needs Azure AD app auth (see below)
-
-### Mode 3: Flip Status Monitor ✅ DASHBOARD WORKS
-- ✅ Dashboard shows all flip requests with status badges
-- ✅ Scheduled polling configured (9am/1pm/5pm EST)
-- ✅ Teams channel created: "WFS PO Flip Tool" #alerts
-- ✅ Teams notification logic complete (logs for now)
-- 💡 See `docs/SHAREPOINT_INTEGRATION.md` for enabling real SharePoint reads
+Consolidates **Seller Center + Scheduler 2.0 + Tableau TUP** into one FastAPI + HTMX web app.
+Access from any browser — hosted on a VDI, used by the whole team.
 
 ---
 
-## 🚀 Quick Start
+## ✅ What's Working
 
-### 1. Install dependencies
+| Feature | Status |
+|---------|--------|
+| Escalation Lookup (BQ) | ✅ Fully functional |
+| PO Flip pre-fill from BQ | ✅ All fields auto-populated |
+| L3 category (all items) | ✅ Via preproc_offer_detl |
+| SharePoint Excel write | ✅ Real writes — finds next available row |
+| VLOOKUP formulas (Q & R) | ✅ WM Week + Placed Orders auto-calculated |
+| Auto token refresh | ✅ Silent refresh, browser re-auth if needed |
+| SQLite flip tracker | ✅ Local history of all requests |
+| Flip Status Monitor | ✅ Dashboard with scheduled polling |
+| Teams notifications | ✅ Configured (9am/1pm/5pm EST) |
+
+---
+
+## 🚀 Setup (First Time on a New Machine)
+
+### 1. Prerequisites
+- **Code Puppy** installed (get it at [puppy.walmart.com](https://puppy.walmart.com))
+- **gcloud CLI** installed and authenticated
+- **Python 3.11+**
+
+### 2. Clone and install
 
 ```bash
-cd "/Users/t0t0ech/Documents/Code Puppy/wfs-escalation-tool"
+git clone <repo-url>
+cd wfs-escalation-tool
 uv venv
-source .venv/bin/activate
+source .venv/bin/activate        # Mac/Linux
+.venv\Scripts\activate           # Windows
 uv pip install -r requirements.txt --index-url https://pypi.ci.artifacts.walmart.com/artifactory/api/pypi/external-pypi/simple --allow-insecure-host pypi.ci.artifacts.walmart.com
 ```
 
-### 2. Authenticate with GCloud
+### 3. Configure environment
 
 ```bash
-"/Users/t0t0ech/Documents/gCloud CLI/google-cloud-sdk/bin/gcloud" auth application-default login
+cp .env.example .env
+# Edit .env — most defaults are fine, add Teams IDs if you have them
 ```
 
-### 3. Run the app
+### 4. Authenticate
 
 ```bash
-./run.sh
-# Or: uvicorn main:app --reload --port 8765
+# BigQuery
+gcloud auth application-default login
+
+# Microsoft Graph (SharePoint writes)
+# In Code Puppy, run:
+/msgraph_auth
+```
+
+### 5. Run
+
+```bash
+./run.sh                              # Mac/Linux
+uvicorn main:app --port 8765         # Windows
 ```
 
 Then open: **http://localhost:8765**
 
+Team members access via: **http://<vdi-ip>:8765**
+
 ---
 
-## 🔧 What Needs Azure AD Auth (Optional)
+## 🔐 Auth Notes
 
-To enable **SharePoint writes** and **Teams notifications**, you need to register an Azure AD application:
-
-### Steps:
-1. Go to Azure Portal → App Registrations
-2. Create new app: "WFS PO Flip Tool"
-3. Get `client_id` + `client_secret`
-4. Add API permissions:
-   - `Sites.ReadWrite.All` (SharePoint)
-   - `ChannelMessage.Send` (Teams)
-5. Update code to use OAuth Device Flow
-
-**For now:** The app logs what it WOULD post to Teams/SharePoint. You can manually verify via msgraph:
-
-```bash
-# In Code Puppy
-/agent msgraph
-# Then post manually to test
-```
+- **BigQuery:** Uses your personal gcloud ADC credentials
+- **SharePoint:** Uses Microsoft Graph tokens stored by Code Puppy (`~/.code_puppy/msgraph.json`)
+  - Tokens auto-refresh silently (hourly)
+  - If fully expired (~90 days), browser re-auth launches automatically
+  - All SharePoint writes appear as whoever ran `/msgraph_auth` on the host machine
+- **Team members** access via browser — no auth needed on their end
 
 ---
 
 ## 📊 Teams Channel
 
-Already created and ready:
-- **Team:** WFS PO Flip Tool (Private)
-- **Channel:** #alerts
 - **Team ID:** `eec3e859-6399-46a1-9d17-78b9421be03c`
 - **Channel ID:** `19:433a8ab43f8744ed9b898e4f356ff76f@thread.tacv2`
 
@@ -92,23 +90,4 @@ Already created and ready:
 
 ---
 
-## 🎯 Current Capabilities
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| BQ Escalation Query | ✅ Works | Validated with PO 6577303WFA |
-| BQ PO Flip Pre-fill | ✅ Works | All fields auto-populated |
-| SQLite Flip Tracker | ✅ Works | Stores all requests locally |
-| Dashboard UI | ✅ Works | Shows pending/approved/denied |
-| Scheduler (3x/day) | ✅ Works | Runs at 9am/1pm/5pm EST |
-| SharePoint Write | ⚠️ Logs Only | Needs Azure AD app |
-| Teams Notifications | ⚠️ Logs Only | Needs Azure AD app |
-
----
-
-## 🐶 Built by Dave (Code Puppy)
-
-SQL query tested live with PO `6577303WFA` on 2026-03-25.
-All 5 BQ table joins validated. Teams channel created and tested.
-
-Happy escalating! 🚀
+## 🐶 Built with Code Puppy
