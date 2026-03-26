@@ -1,0 +1,95 @@
+#!/Users/t0t0ech/.code-puppy-venv/bin/python3
+"""Write a row to the WFS PO Flip SharePoint Excel file.
+
+Called as a subprocess from the FastAPI app.
+Uses code-puppy's MSGraphClient + cached auth tokens.
+
+Usage:
+    python3 scripts/sharepoint_write.py '{"po_number": "...", ...}'
+
+Returns JSON to stdout:
+    {"success": true, "row_number": 2453}
+    {"success": false, "error": "..."}
+"""
+from __future__ import annotations
+import sys
+import json
+import re
+
+SITE_ID   = "teams.wal-mart.com,e3a0eb98-6815-4f78-903b-622909921022,1227cc7c-7338-43ee-ab55-17682c982812"
+FILE_ID   = "3412E7C8-7761-4233-B87D-384885821FEE"
+SHEET     = "Sheet1"
+BASE_PATH = f"/sites/{SITE_ID}/drive/items/{FILE_ID}/workbook/worksheets/{SHEET}"
+
+
+def get_next_row(client) -> int:
+    """Find the actual last row with data, return next available row number."""
+    result = client.get(f"{BASE_PATH}/usedRange(valuesOnly=true)")
+    # The address looks like "Sheet1!A1:U2452" - parse the last row
+    address = result.get("address", "")
+    match = re.search(r":(\w+)(\d+)$", address)
+    if match:
+        return int(match.group(2)) + 1
+    raise ValueError(f"Could not parse used range address: {address}")
+
+
+def write_row(client, row_num: int, data: dict) -> None:
+    """Write the flip request data to the specified row."""
+    values = [[
+        data.get("date", ""),
+        data.get("am_name", ""),
+        data.get("pid", ""),
+        data.get("seller_name", ""),
+        data.get("po_number", ""),
+        data.get("total_units", ""),
+        data.get("assigned_fc", ""),
+        data.get("request_fc", ""),
+        data.get("total_gmv", ""),
+        data.get("l3_category", ""),
+        data.get("reason", ""),
+        data.get("delivery_date", ""),
+        "",                              # M - blank
+        data.get("event", ""),
+        data.get("hero_item", "N"),
+        data.get("ae_event", "N"),
+        data.get("wm_week", ""),
+        "",                              # R - formula / ops fills
+        "",                              # S - AM Action
+        "",                              # T - Approved
+        "",                              # U - Inv. Mgmt Comment
+    ]]
+
+    address = f"A{row_num}:U{row_num}"
+    client.patch(
+        f"{BASE_PATH}/range(address='{address}')",
+        json={"values": values},
+    )
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(json.dumps({"success": False, "error": "No data provided"}))
+        sys.exit(1)
+
+    try:
+        data = json.loads(sys.argv[1])
+    except json.JSONDecodeError as e:
+        print(json.dumps({"success": False, "error": f"Invalid JSON: {e}"}))
+        sys.exit(1)
+
+    try:
+        from code_puppy.plugins.walmart_specific.msgraph_client import MSGraphClient
+        client = MSGraphClient()
+
+        row_num = get_next_row(client)
+        write_row(client, row_num, data)
+
+        print(json.dumps({"success": True, "row_number": row_num}))
+
+    except Exception as e:
+        print(json.dumps({"success": False, "error": str(e)}))
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

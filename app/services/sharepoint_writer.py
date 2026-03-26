@@ -1,14 +1,16 @@
-"""SharePoint Excel writer via msgraph sub-agent."""
+"""SharePoint Excel writer — calls scripts/sharepoint_write.py via code-puppy Python."""
 from __future__ import annotations
-import subprocess
 import json
 import logging
+import subprocess
 from datetime import date
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-SHAREPOINT_FILE_ID = "3412E7C8-7761-4233-B87D-384885821FEE"
-SHAREPOINT_SHEET = "Sheet1"
+# Absolute paths so the app can be run from any cwd
+CODE_PUPPY_PYTHON = Path.home() / ".code-puppy-venv/bin/python3"
+SCRIPT_PATH       = Path(__file__).resolve().parents[2] / "scripts" / "sharepoint_write.py"
 
 
 def add_flip_request_to_sharepoint(
@@ -30,96 +32,64 @@ def add_flip_request_to_sharepoint(
     ae_event: str = "N",
 ) -> tuple[bool, int | None, str]:
     """
-    Add a PO flip request row to SharePoint via msgraph sub-agent.
-    
+    Add a PO flip request row to SharePoint via code-puppy's MSGraphClient.
+
     Returns:
         (success, row_number, message)
-        - success: True if row was added successfully
-        - row_number: The actual SharePoint row number written (or None if failed)
-        - message: Success or error message
     """
     try:
-        today = date.today().strftime("%-m/%-d/%Y")  # e.g., "3/25/2026"
-        
-        # Format delivery date if provided
+        today = date.today().strftime("%-m/%-d/%Y")
+
+        # Format delivery date from YYYY-MM-DD to M/D/YYYY
         if delivery_date:
-            # Convert from YYYY-MM-DD to M/D/YYYY
             try:
-                parts = delivery_date.split("-")
-                delivery_date = f"{int(parts[1])}/{int(parts[2])}/{parts[0]}"
-            except:
-                pass  # Keep as-is if parsing fails
-        
-        prompt = f"""Add a row to the WFS PO Flip Excel file.
+                y, m, d = delivery_date.split("-")
+                delivery_date = f"{int(m)}/{int(d)}/{y}"
+            except Exception:
+                pass  # keep as-is if parsing fails
 
-File details:
-- File ID: {SHAREPOINT_FILE_ID}
-- Sheet: {SHAREPOINT_SHEET}
+        payload = json.dumps({
+            "date":          today,
+            "am_name":       am_name,
+            "pid":           str(pid),
+            "seller_name":   seller_name,
+            "po_number":     po_number,
+            "total_units":   total_units,
+            "assigned_fc":   assigned_fc,
+            "request_fc":    request_fc,
+            "total_gmv":     total_gmv,
+            "l3_category":   l3_category,
+            "reason":        reason,
+            "delivery_date": delivery_date,
+            "event":         event,
+            "hero_item":     hero_item,
+            "ae_event":      ae_event,
+            "wm_week":       wm_week,
+        })
 
-IMPORTANT: First read the used range to find the actual last row with data, then add the new row immediately after it. Do NOT use the total row count.
+        log.info("Calling SharePoint write script for PO %s...", po_number)
 
-Data to add (columns A-U):
-Column A (Date): {today}
-Column B (AM Name): {am_name}
-Column C (PID): {pid}
-Column D (Seller): {seller_name}
-Column E (PO#): {po_number}
-Column F (Units): {total_units}
-Column G (Assigned FC): {assigned_fc}
-Column H (Request FC): {request_fc}
-Column I (PO GMV): {total_gmv}
-Column J (Key Assortment/L3): {l3_category}
-Column K (Reason): {reason}
-Column L (Delivery Date): {delivery_date}
-Column M: (blank)
-Column N (Event): {event}
-Column O (Hero Item): {hero_item}
-Column P (AE Event): {ae_event}
-Column Q (WM Week): {wm_week}
-Column R: (blank - may be formula)
-Column S (AM Action): (blank)
-Column T (Approved): (blank)
-Column U (Inv. Mgmt Comment): (blank)
-
-After adding the row, please tell me the exact row number where it was added.
-"""
-        
-        log.info("Calling msgraph to add SharePoint row...")
-        
-        # OPTION 1: Call via helper script (current - simulated)
-        # result = subprocess.run(
-        #     ["python3", "scripts/call_msgraph.py", prompt],
-        #     capture_output=True,
-        #     text=True,
-        # )
-        # response = json.loads(result.stdout)
-        # return (response["success"], response.get("row_number"), response["message"])
-        
-        # OPTION 2: Call msgraph directly (RECOMMENDED - uncomment when ready)
-        # This is the same approach used in the manual test
-        # You would invoke the msgraph agent with the prompt above,
-        # parse the response to extract the row number,
-        # and return (True, row_num, message)
-        
-        # For now: SIMULATION MODE
-        log.info("="*60)
-        log.info("[SHAREPOINT - SIMULATION MODE]")
-        log.info("In production, this prompt would be sent to msgraph:")
-        log.info("="*60)
-        log.info(prompt)
-        log.info("="*60)
-        
-        # Simulate success - return a fake row number
-        # TODO: Replace with actual msgraph call that returns real row number
-        import random
-        fake_row_num = 2450 + random.randint(1, 100)
-        
-        return (
-            True,
-            fake_row_num,
-            f"[SIMULATED] Row would be added to SharePoint at row ~{fake_row_num}"
+        result = subprocess.run(
+            [str(CODE_PUPPY_PYTHON), str(SCRIPT_PATH), payload],
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
-        
+
+        response = json.loads(result.stdout.strip())
+
+        if response.get("success"):
+            row_num = response["row_number"]
+            log.info("SharePoint row %d written for PO %s", row_num, po_number)
+            return (True, row_num, f"Row {row_num} written to SharePoint")
+        else:
+            error = response.get("error", "Unknown error")
+            log.warning("SharePoint write failed: %s", error)
+            return (False, None, error)
+
+    except subprocess.TimeoutExpired:
+        log.error("SharePoint write timed out for PO %s", po_number)
+        return (False, None, "SharePoint write timed out (30s)")
     except Exception as e:
-        log.error("Failed to add SharePoint row: %s", e)
+        log.error("SharePoint write error: %s", e)
         return (False, None, f"Error: {e}")
