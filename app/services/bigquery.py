@@ -49,7 +49,7 @@ item_hierarchy AS (
       ROW_NUMBER() OVER (PARTITION BY offr_id ORDER BY rpt_dt DESC) AS rn
     FROM `wmt-wfs-analytics.WW_MP_DS_MODELS.preproc_offer_detl`
     WHERE offr_id IN (SELECT DISTINCT OFFR_ID FROM po_base)
-      AND rpt_dt >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+      AND CAST(rpt_dt AS DATE) >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
   )
   WHERE rn = 1
 ),
