@@ -39,17 +39,35 @@ def _has_arrived(row: dict) -> bool:
     return status in arrived_statuses
 
 
-def _is_ltl(row: dict) -> bool:
-    val = row.get("IS_LTL")
-    if isinstance(val, bool):
-        return val
-    return str(val).strip().lower() in {"true", "1", "yes"}
+def _is_its(row: dict) -> bool:
+    """ITS (In-Transit Shipment) — detected via INVENTORY_TYPE_NAME or LOAD_TYPE_NAME."""
+    inv_type = str(row.get("INVENTORY_TYPE_NAME") or "").strip().upper()
+    load_type = str(row.get("LOAD_TYPE_NAME") or "").strip().upper()
+    return "ITS" in inv_type or "ITS" in load_type
+
+
+def _is_checked_in(row: dict) -> bool:
+    """ITS is 'checked in' once it reaches an arrived/working status at the FC."""
+    return _has_arrived(row)
+
+
+def _load_type_label(row: dict) -> str:
+    """Human-readable shipment type for display in reasons."""
+    load = str(row.get("LOAD_TYPE_NAME") or "").strip()
+    inv  = str(row.get("INVENTORY_TYPE_NAME") or "").strip()
+    return load or inv or "Unknown"
 
 
 def analyze_escalation(rows: list[dict]) -> EscalationResult:
     """
-    Apply spec escalation logic across all item rows for a PO.
-    Returns a single verdict with per-item breakdown.
+    Escalation criteria (per SOP):
+      Escalate Hero/Mosaic OOS-risk items for:
+        - FTL / Full Truck / Container — when arrived at FC
+        - LTL / Limited Truck / Container — when arrived at FC
+        - ITS Shipments — ONLY when NOT yet checked in
+      Do NOT escalate:
+        - ITS already checked in (already being worked)
+        - Non-hero/non-mosaic with healthy stock
     """
     settings = get_settings()
     threshold = settings.WOS_THRESHOLD
@@ -66,27 +84,33 @@ def analyze_escalation(rows: list[dict]) -> EscalationResult:
             borderline_items=[],
         )
 
-    # Shared signals (same for all rows on same delivery)
+    # Shared delivery signals (same for all rows on the same delivery)
     sample = rows[0]
+    its = _is_its(sample)
     arrived = _has_arrived(sample)
-    ltl = _is_ltl(sample)
+    load_label = _load_type_label(sample)
 
-    # Immediate disqualifiers
-    if ltl:
-        return EscalationResult(
-            verdict="DO_NOT_ESCALATE",
-            reasons=["Small parcel / LTL shipment — per SOP do not escalate."],
-            at_risk_items=[],
-            borderline_items=[],
-        )
-
-    if not arrived:
-        return EscalationResult(
-            verdict="DO_NOT_ESCALATE",
-            reasons=[f"Trailer not yet arrived (status: {sample.get('DELIVERY_STATUS')}). Cannot escalate."],
-            at_risk_items=[],
-            borderline_items=[],
-        )
+    # Gate check: is this shipment in an escalatable state?
+    if its:
+        # ITS: escalate only when NOT yet checked in
+        if _is_checked_in(sample):
+            return EscalationResult(
+                verdict="DO_NOT_ESCALATE",
+                reasons=[f"ITS shipment already checked in (status: {sample.get('DELIVERY_STATUS')}) — no escalation needed."],
+                at_risk_items=[],
+                borderline_items=[],
+            )
+        reasons.append(f"ITS shipment not yet checked in (status: {sample.get('DELIVERY_STATUS')}) — eligible for escalation.")
+    else:
+        # FTL / LTL / LCL: escalate only when arrived
+        if not arrived:
+            return EscalationResult(
+                verdict="DO_NOT_ESCALATE",
+                reasons=[f"{load_label} not yet arrived (status: {sample.get('DELIVERY_STATUS')}). Cannot escalate."],
+                at_risk_items=[],
+                borderline_items=[],
+            )
+        reasons.append(f"{load_label} arrived at FC (status: {sample.get('DELIVERY_STATUS')}) — eligible for escalation.")
 
     for row in rows:
         hero = _is_hero(row)

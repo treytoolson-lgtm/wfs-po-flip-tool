@@ -13,13 +13,15 @@
         </p>
 
         <div class="bg-blue-50 border-l-4 border-walmart-blue p-4 mb-6 text-sm">
-            <strong class="text-walmart-blue">Escalation Criteria:</strong>
+            <strong class="text-walmart-blue">What gets escalated (per SOP):</strong>
+            <p class="mt-1 text-gray-700">Out of stock (or at risk of OOS) Hero/Mosaic items that meet <em>all</em> of the following:</p>
             <ul class="mt-2 space-y-1 text-gray-700">
-                <li>✅ Hero/Mosaic item + WOS < {{wos_threshold|default(2.0)}} weeks</li>
-                <li>✅ Trailer has arrived (not scheduled)</li>
-                <li>✅ Full truck/container (not LTL/small parcel)</li>
-                <li>⚠️ Borderline: Hero item but WOS 2.0-2.5 weeks</li>
-                <li>❌ Do NOT escalate: LTL, not arrived, or non-hero with healthy stock</li>
+                <li>✅ Hero or Mosaic item with WOS &lt; {{ wos_threshold|default(2.0) }} weeks</li>
+                <li>✅ Full Truck / Container Load <strong>or</strong> Limited Truck / Container (LTL/LCL) — when arrived at FC</li>
+                <li>✅ ITS Shipments — <strong>only when not yet checked in</strong></li>
+            </ul>
+            <ul class="mt-2 space-y-1 text-gray-700">
+                <li>❌ Do NOT escalate: ITS already checked in, non-hero with healthy stock</li>
             </ul>
         </div>
 
