@@ -37,8 +37,8 @@ WITH po_base AS (
   GROUP BY p.PO_NUM, p.DELIVERY_NUMBER, p.DC_NUMBER, p.VENDOR_NUM, p.VENDOR_NAME, p.ITEM_ID, p.ITEM_NAME
 ),
 item_hierarchy AS (
-  -- L3 category from offer catalog — covers all WFS items, not just event items
-  -- Deduplicated to most recent weekly snapshot per offer
+  -- L3 category — filtered to only our OFFR_IDs + last 90 days of snapshots
+  -- Avoids full table scan of preproc_offer_detl (millions of weekly snapshot rows)
   SELECT
     offr_id,
     rpt_lvl_3_nm  AS L3_CATEGORY
@@ -48,11 +48,13 @@ item_hierarchy AS (
       rpt_lvl_3_nm,
       ROW_NUMBER() OVER (PARTITION BY offr_id ORDER BY rpt_dt DESC) AS rn
     FROM `wmt-wfs-analytics.WW_MP_DS_MODELS.preproc_offer_detl`
+    WHERE offr_id IN (SELECT DISTINCT OFFR_ID FROM po_base)
+      AND rpt_dt >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
   )
   WHERE rn = 1
 ),
 trailer_info AS (
-  -- Get ONE representative trailer per delivery (avoid duplicates)
+  -- Filtered to only deliveries in this query — avoids full ETUP_DC_TRAILERS scan
   SELECT DISTINCT
     DELIVERY_NUMBER,
     DC_NUMBER,
@@ -67,6 +69,7 @@ trailer_info AS (
     ANY_VALUE(ESCALATION_TRAILER_REASON)      AS ESCALATION_TRAILER_REASON,
     ANY_VALUE(ESCALATION_PO_REASON)           AS ESCALATION_PO_REASON
   FROM `wmt-cp-prod.e2e_fmt_cp.ETUP_DC_TRAILERS`
+  WHERE DELIVERY_NUMBER IN (SELECT DISTINCT DELIVERY_NUMBER FROM po_base)
   GROUP BY DELIVERY_NUMBER, DC_NUMBER
 ),
 scheduler_info AS (
@@ -74,7 +77,7 @@ scheduler_info AS (
   SELECT DISTINCT
     PO_NUMBER,
     DELIVERY_NUMBER,
-    CAST(DC_NUMBER AS STRING)                 AS DC_NUMBER,
+    CAST(DC_NUMBER AS INT64)                  AS DC_NUMBER,
     ANY_VALUE(LOAD_TYPE_NAME)                 AS LOAD_TYPE_NAME,
     ANY_VALUE(APPOINTMENT_DATE)               AS APPOINTMENT_DATE,
     ANY_VALUE(WM_YR_WK_NBR)                   AS WM_YR_WK_NBR,
@@ -97,7 +100,7 @@ events_info AS (
   GROUP BY CATLG_ITEM_ID, PRTNR_ORG_CD
 ),
 isr_info AS (
-  -- Get ISR inventory metrics per item (deduped)
+  -- Filtered to only items in this query — avoids full ISR table scan
   SELECT DISTINCT
     catlg_item_id,
     prtnr_id,
@@ -105,6 +108,7 @@ isr_info AS (
     MAX(hero_flag)                            AS HERO_FLAG_ISR,
     MAX(ats_qty_current_wk)                   AS ATS_QTY
   FROM `wmt-wfs-analytics.inv_ana.Inv_ISR_Forward_Looking_copy`
+  WHERE catlg_item_id IN (SELECT DISTINCT CAST(ITEM_ID AS STRING) FROM po_base)
   GROUP BY catlg_item_id, prtnr_id
 ),
 am_info AS (
@@ -159,7 +163,7 @@ LEFT JOIN trailer_info t
 LEFT JOIN scheduler_info s
   ON  pb.PO_NUM                 = s.PO_NUMBER
   AND pb.DELIVERY_NUMBER        = s.DELIVERY_NUMBER
-  AND CAST(pb.DC_NUMBER AS INT64) = CAST(s.DC_NUMBER AS INT64)
+  AND pb.DC_NUMBER = s.DC_NUMBER
 LEFT JOIN item_hierarchy ih
   ON  pb.OFFR_ID = ih.offr_id
 LEFT JOIN events_info e
@@ -183,13 +187,22 @@ WHERE wfs_ind       = 1
 """
 
 
+# Module-level singleton — created once, reused for every query
+_bq_client: bigquery.Client | None = None
+
+
 def _get_client() -> bigquery.Client:
-    settings = get_settings()
-    settings.configure_gcloud_path()
-    creds, project = google.auth.default(
-        scopes=["https://www.googleapis.com/auth/bigquery.readonly"]
-    )
-    return bigquery.Client(project=settings.BQ_PROJECT_ANALYTICS, credentials=creds)
+    global _bq_client
+    if _bq_client is None:
+        settings = get_settings()
+        settings.configure_gcloud_path()
+        creds, _ = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/bigquery.readonly"]
+        )
+        _bq_client = bigquery.Client(
+            project=settings.BQ_PROJECT_ANALYTICS, credentials=creds
+        )
+    return _bq_client
 
 
 def query_po_numbers(po_numbers: list[str]) -> list[dict[str, Any]]:
