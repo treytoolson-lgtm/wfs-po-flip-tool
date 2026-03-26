@@ -27,9 +27,7 @@ def get_valid_token_or_reauth() -> str:
     If refresh fails, launch the browser auth flow automatically.
     Returns the access token or raises RuntimeError.
     """
-    from code_puppy.plugins.walmart_specific.msgraph_tokens import (
-        get_valid_access_token,
-    )
+    from code_puppy.plugins.walmart_specific.msgraph_tokens import get_valid_access_token
 
     # Step 1: Try silent refresh (uses refresh_token under the hood)
     token = get_valid_access_token()
@@ -39,12 +37,9 @@ def get_valid_token_or_reauth() -> str:
     # Step 2: Silent refresh failed — launch browser auth flow
     print(json.dumps({"_log": "Token expired, launching browser re-auth..."}), file=sys.stderr)
     try:
-        from code_puppy.plugins.walmart_specific.msgraph_auth import (
-            handle_msgraph_auth_command,
-        )
+        from code_puppy.plugins.walmart_specific.msgraph_auth import handle_msgraph_auth_command
         result = handle_msgraph_auth_command("/msgraph_auth", "msgraph_auth")
         if result and "successful" in result.lower():
-            # Auth succeeded — grab the freshly saved token
             token = get_valid_access_token()
             if token:
                 return token
@@ -57,10 +52,13 @@ def get_valid_token_or_reauth() -> str:
         "Microsoft Graph authentication required. "
         "Please run /msgraph_auth in Code Puppy and try again."
     )
+
+
+def get_next_row(client) -> int:
     """Find the actual last row with data, return next available row number."""
     result = client.get(f"{BASE_PATH}/usedRange(valuesOnly=true)")
-    # The address looks like "Sheet1!A1:U2452" - parse the last row
     address = result.get("address", "")
+    # Address looks like "Sheet1!A1:Y2452" — [A-Za-z]+ avoids greedy digit eating
     match = re.search(r":([A-Za-z]+)(\d+)$", address)
     if match:
         return int(match.group(2)) + 1
@@ -82,15 +80,15 @@ def write_row(client, row_num: int, data: dict) -> None:
         data.get("l3_category", ""),
         data.get("reason", ""),
         data.get("delivery_date", ""),
-        "",                              # M - blank
+        "",                           # M - blank
         data.get("event", ""),
         data.get("hero_item", "N"),
         data.get("ae_event", "N"),
         data.get("wm_week", ""),
-        "",                              # R - formula / ops fills
-        "",                              # S - AM Action
-        "",                              # T - Approved
-        "",                              # U - Inv. Mgmt Comment
+        "",                           # R - formula / ops fills
+        "",                           # S - AM Action
+        "",                           # T - Approved
+        "",                           # U - Inv. Mgmt Comment
     ]]
 
     address = f"A{row_num}:U{row_num}"
@@ -112,7 +110,7 @@ def main():
         sys.exit(1)
 
     try:
-        # Ensure we have a valid token (auto-refreshes / auto-relaunches browser if needed)
+        # Ensure valid token — auto-refreshes, or launches browser if fully expired
         get_valid_token_or_reauth()
 
         from code_puppy.plugins.walmart_specific.msgraph_client import MSGraphClient
