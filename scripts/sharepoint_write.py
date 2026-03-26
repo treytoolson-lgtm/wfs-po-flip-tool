@@ -61,7 +61,7 @@ def get_valid_token_or_reauth() -> str:
     result = client.get(f"{BASE_PATH}/usedRange(valuesOnly=true)")
     # The address looks like "Sheet1!A1:U2452" - parse the last row
     address = result.get("address", "")
-    match = re.search(r":(\w+)(\d+)$", address)
+    match = re.search(r":([A-Za-z]+)(\d+)$", address)
     if match:
         return int(match.group(2)) + 1
     raise ValueError(f"Could not parse used range address: {address}")
