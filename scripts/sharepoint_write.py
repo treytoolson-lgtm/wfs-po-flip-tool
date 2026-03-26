@@ -22,7 +22,41 @@ SHEET     = "Sheet1"
 BASE_PATH = f"/sites/{SITE_ID}/drive/items/{FILE_ID}/workbook/worksheets/{SHEET}"
 
 
-def get_next_row(client) -> int:
+def get_valid_token_or_reauth() -> str:
+    """Get a valid Graph token, attempting silent refresh first.
+    If refresh fails, launch the browser auth flow automatically.
+    Returns the access token or raises RuntimeError.
+    """
+    from code_puppy.plugins.walmart_specific.msgraph_tokens import (
+        get_valid_access_token,
+    )
+
+    # Step 1: Try silent refresh (uses refresh_token under the hood)
+    token = get_valid_access_token()
+    if token:
+        return token
+
+    # Step 2: Silent refresh failed — launch browser auth flow
+    print(json.dumps({"_log": "Token expired, launching browser re-auth..."}), file=sys.stderr)
+    try:
+        from code_puppy.plugins.walmart_specific.msgraph_auth import (
+            handle_msgraph_auth_command,
+        )
+        result = handle_msgraph_auth_command("/msgraph_auth", "msgraph_auth")
+        if result and "successful" in result.lower():
+            # Auth succeeded — grab the freshly saved token
+            token = get_valid_access_token()
+            if token:
+                return token
+    except Exception as e:
+        raise RuntimeError(
+            f"Auto re-auth failed: {e}. Please run /msgraph_auth in Code Puppy."
+        ) from e
+
+    raise RuntimeError(
+        "Microsoft Graph authentication required. "
+        "Please run /msgraph_auth in Code Puppy and try again."
+    )
     """Find the actual last row with data, return next available row number."""
     result = client.get(f"{BASE_PATH}/usedRange(valuesOnly=true)")
     # The address looks like "Sheet1!A1:U2452" - parse the last row
@@ -78,6 +112,9 @@ def main():
         sys.exit(1)
 
     try:
+        # Ensure we have a valid token (auto-refreshes / auto-relaunches browser if needed)
+        get_valid_token_or_reauth()
+
         from code_puppy.plugins.walmart_specific.msgraph_client import MSGraphClient
         client = MSGraphClient()
 

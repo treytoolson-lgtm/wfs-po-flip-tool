@@ -146,15 +146,22 @@ async def po_flip_submit(
             if placed else "Not available"
         )
 
-        sp_row_info = f"SharePoint row: {sp_row_num}" if sp_row_num else "(SharePoint write simulated)"
-        
+        if sp_row_num:
+            sp_row_badge = f'<span class="text-green-500">✅ SharePoint row: {sp_row_num}</span>'
+        else:
+            sp_row_badge = (
+                f'<span class="text-amber-600">'
+                f'⚠️ SharePoint write failed: {sp_message}'
+                f'</span>'
+            )
+
         return HTMLResponse(f"""
             <div class="bg-green-50 border border-green-200 rounded-lg p-6">
                 <div class="text-4xl mb-3">&#x2705;</div>
                 <h3 class="text-lg font-bold text-green-800">Flip Request Submitted!</h3>
-                <p class="text-green-700 mt-1">PO <strong>{po_number}</strong> → <strong>{request_fc}</strong></p>
+                <p class="text-green-700 mt-1">PO <strong>{po_number}</strong> &rarr; <strong>{request_fc}</strong></p>
                 <p class="text-sm text-green-600 mt-1">Current orders at {request_fc} (WK{wm_week}): {placed_info}</p>
-                <p class="text-xs text-green-500 mt-2">Tracking ID: #{request_id} | {sp_row_info}</p>
+                <p class="text-xs mt-2">Tracking ID: #{request_id} | {sp_row_badge}</p>
                 <p class="text-xs text-gray-500 mt-1">You\'ll be notified when approved/denied.</p>
                 <button onclick="window.location.reload()" class="mt-4 text-sm text-green-700 underline">New Request</button>
             </div>

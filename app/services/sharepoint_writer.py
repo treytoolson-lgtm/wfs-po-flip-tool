@@ -85,6 +85,12 @@ def add_flip_request_to_sharepoint(
         else:
             error = response.get("error", "Unknown error")
             log.warning("SharePoint write failed: %s", error)
+            # Surface a friendly auth hint if it's a token issue
+            if "authentication" in error.lower() or "token" in error.lower():
+                error = (
+                    "Microsoft Graph token expired. "
+                    "Please run /msgraph_auth in Code Puppy and resubmit."
+                )
             return (False, None, error)
 
     except subprocess.TimeoutExpired:
