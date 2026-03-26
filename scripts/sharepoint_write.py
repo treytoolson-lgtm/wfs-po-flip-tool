@@ -66,35 +66,44 @@ def get_next_row(client) -> int:
 
 
 def write_row(client, row_num: int, data: dict) -> None:
-    """Write the flip request data to the specified row."""
-    values = [[
-        data.get("date", ""),
-        data.get("am_name", ""),
-        data.get("pid", ""),
-        data.get("seller_name", ""),
-        data.get("po_number", ""),
-        data.get("total_units", ""),
-        data.get("assigned_fc", ""),
-        data.get("request_fc", ""),
-        data.get("total_gmv", ""),
-        data.get("l3_category", ""),
-        data.get("reason", ""),
-        data.get("delivery_date", ""),
-        "",                           # M - blank
-        data.get("event", ""),
-        data.get("hero_item", "N"),
-        data.get("ae_event", "N"),
-        data.get("wm_week", ""),
-        "",                           # R - formula / ops fills
-        "",                           # S - AM Action
-        "",                           # T - Approved
-        "",                           # U - Inv. Mgmt Comment
+    """Write the flip request data to the specified row.
+
+    Uses 'formulas' so columns Q and R get proper VLOOKUPs:
+      Q: WM Week of arrival at current FC (from delivery date)
+      R: Current placed orders at requested FC (from WM Week)
+    """
+    # Formulas referencing the target row number
+    wm_week_formula     = f"=VLOOKUP(L{row_num},FY26_Dates!A:B,2,FALSE)"
+    placed_orders_formula = f"=VLOOKUP(Q{row_num},Weekly_Inbound_Deliveries!H:J,3,FALSE)"
+
+    formulas = [[
+        data.get("date", ""),          # A
+        data.get("am_name", ""),       # B
+        data.get("pid", ""),           # C
+        data.get("seller_name", ""),   # D
+        data.get("po_number", ""),     # E
+        data.get("total_units", ""),   # F
+        data.get("assigned_fc", ""),   # G
+        data.get("request_fc", ""),    # H
+        data.get("total_gmv", ""),     # I
+        data.get("l3_category", ""),   # J
+        data.get("reason", ""),        # K
+        data.get("delivery_date", ""), # L
+        "",                            # M - blank
+        data.get("event", ""),         # N
+        data.get("hero_item", "N"),    # O
+        data.get("ae_event", "N"),     # P
+        wm_week_formula,               # Q - WM Week of arrival at current FC
+        placed_orders_formula,         # R - Current placed orders at request FC
+        "",                            # S - AM Action
+        "",                            # T - Approved
+        "",                            # U - Inv. Mgmt Comment
     ]]
 
     address = f"A{row_num}:U{row_num}"
     client.patch(
         f"{BASE_PATH}/range(address='{address}')",
-        json={"values": values},
+        json={"formulas": formulas},
     )
 
 
