@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     MONITOR_SCHEDULE_HOURS: str = "9,13,17"
 
     # App
-    APP_PORT: int = 8765
+    APP_PORT: int = 8766
 
     class Config:
         env_file = ".env"
