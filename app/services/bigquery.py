@@ -12,9 +12,10 @@ from config import get_settings
 
 log = logging.getLogger(__name__)
 
-# Master SQL — Fixed 2026-03-25 to prevent cartesian product duplicates
-# Validated with PO 6577303WFA: 1,045 units (matches Seller Center)
-# Uses CTEs to aggregate independently, then joins to prevent row multiplication
+# Master SQL — Updated 2026-03-25
+# - Fixed cartesian product duplicates (validated vs Seller Center)
+# - Updated 2026-03-25: L3 now from preproc_offer_detl (covers all WFS items)
+#   events_item_list only has event/campaign items, so many POs were blank
 MASTER_QUERY = """
 WITH po_base AS (
   -- Core PO data with accurate unit counts (no joins = no duplicates)
@@ -26,6 +27,7 @@ WITH po_base AS (
     p.VENDOR_NAME                                   AS SELLER_NAME,
     p.ITEM_ID,
     p.ITEM_NAME,
+    ANY_VALUE(p.OFFR_ID)                            AS OFFR_ID,
     SUM(p.ORDER_QTY)                                AS TOTAL_UNITS,
     ROUND(SUM(p.ORDER_QTY * p.CURR_ITEM_PRICE), 2)  AS GMV_IMPACT
   FROM `wmt-cp-prod.e2e_fmt_cp.ETUP_DELIVERY_PO_LINES` p
@@ -33,6 +35,21 @@ WITH po_base AS (
     AND p.INSERT_DT_UTC >= DATE_SUB(CURRENT_DATE(), INTERVAL @date_window_days DAY)
     AND p.PO_OWNER = 'WFS'
   GROUP BY p.PO_NUM, p.DELIVERY_NUMBER, p.DC_NUMBER, p.VENDOR_NUM, p.VENDOR_NAME, p.ITEM_ID, p.ITEM_NAME
+),
+item_hierarchy AS (
+  -- L3 category from offer catalog — covers all WFS items, not just event items
+  -- Deduplicated to most recent weekly snapshot per offer
+  SELECT
+    offr_id,
+    rpt_lvl_3_nm  AS L3_CATEGORY
+  FROM (
+    SELECT
+      offr_id,
+      rpt_lvl_3_nm,
+      ROW_NUMBER() OVER (PARTITION BY offr_id ORDER BY rpt_dt DESC) AS rn
+    FROM `wmt-wfs-analytics.WW_MP_DS_MODELS.preproc_offer_detl`
+  )
+  WHERE rn = 1
 ),
 trailer_info AS (
   -- Get ONE representative trailer per delivery (avoid duplicates)
@@ -68,11 +85,10 @@ scheduler_info AS (
   GROUP BY PO_NUMBER, DELIVERY_NUMBER, DC_NUMBER
 ),
 events_info AS (
-  -- Get event/hero flags per item (deduped)
+  -- Event/hero flags per item — L3 removed (only event items are here, use item_hierarchy instead)
   SELECT DISTINCT
     CATLG_ITEM_ID,
     PRTNR_ORG_CD,
-    MAX(RPT_HRCHY_LVL_3_DESC)                 AS L3_CATEGORY,
     MAX(HERO_ITEM_IND)                        AS IS_HERO_ITEM,
     MAX(MOSC_ITEM_IND)                        AS IS_MOSAIC_ITEM,
     MAX(MINI_EVENT_NM)                        AS EVENT_NAME,
@@ -111,7 +127,7 @@ SELECT
   am.AM_EMAIL,
   pb.ITEM_ID,
   pb.ITEM_NAME,
-  e.L3_CATEGORY,
+  ih.L3_CATEGORY,
   pb.TOTAL_UNITS,
   pb.GMV_IMPACT,
   t.TRAILER_ID,
@@ -144,6 +160,8 @@ LEFT JOIN scheduler_info s
   ON  pb.PO_NUM                 = s.PO_NUMBER
   AND pb.DELIVERY_NUMBER        = s.DELIVERY_NUMBER
   AND CAST(pb.DC_NUMBER AS INT64) = CAST(s.DC_NUMBER AS INT64)
+LEFT JOIN item_hierarchy ih
+  ON  pb.OFFR_ID = ih.offr_id
 LEFT JOIN events_info e
   ON  pb.ITEM_ID   = e.CATLG_ITEM_ID
   AND pb.PID       = e.PRTNR_ORG_CD
