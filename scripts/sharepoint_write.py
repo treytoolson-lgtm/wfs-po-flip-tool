@@ -1,4 +1,4 @@
-#!/Users/t0t0ech/.code-puppy-venv/bin/python3
+#!/usr/bin/env python3
 """Write a row to the WFS PO Flip SharePoint Excel file.
 
 Called as a subprocess from the FastAPI app.

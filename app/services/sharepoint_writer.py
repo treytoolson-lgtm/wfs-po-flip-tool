@@ -8,9 +8,15 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-# Absolute paths so the app can be run from any cwd
-CODE_PUPPY_PYTHON = Path.home() / ".code-puppy-venv/bin/python3"
-SCRIPT_PATH       = Path(__file__).resolve().parents[2] / "scripts" / "sharepoint_write.py"
+# Absolute paths — cross-platform (Windows uses Scripts/python.exe, Unix uses bin/python3)
+import sys as _sys
+_venv = Path.home() / ".code-puppy-venv"
+CODE_PUPPY_PYTHON = (
+    _venv / "Scripts" / "python.exe"
+    if _sys.platform == "win32"
+    else _venv / "bin" / "python3"
+)
+SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "sharepoint_write.py"
 
 
 def add_flip_request_to_sharepoint(
@@ -38,7 +44,9 @@ def add_flip_request_to_sharepoint(
         (success, row_number, message)
     """
     try:
-        today = date.today().strftime("%-m/%-d/%Y")
+        # strftime '%-m' is Linux/Mac only — build cross-platform date string
+        today = date.today()
+        today = f"{today.month}/{today.day}/{today.year}"
 
         # Format delivery date from YYYY-MM-DD to M/D/YYYY
         if delivery_date:
