@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.services.bigquery import query_po_numbers, query_placed_orders
 from app.services.escalation_logic import _safe_float
+from app.services.sharepoint_writer import add_flip_request_to_sharepoint
 from app import database as db
 
 log = logging.getLogger(__name__)
