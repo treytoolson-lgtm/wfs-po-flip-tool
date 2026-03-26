@@ -77,7 +77,7 @@ scheduler_info AS (
   SELECT DISTINCT
     PO_NUMBER,
     DELIVERY_NUMBER,
-    CAST(DC_NUMBER AS INT64)                  AS DC_NUMBER,
+    CAST(DC_NUMBER AS STRING)                 AS DC_NUMBER,
     ANY_VALUE(LOAD_TYPE_NAME)                 AS LOAD_TYPE_NAME,
     ANY_VALUE(APPOINTMENT_DATE)               AS APPOINTMENT_DATE,
     ANY_VALUE(WM_YR_WK_NBR)                   AS WM_YR_WK_NBR,
