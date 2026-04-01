@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}FC Capacity Dashboard | WFS Escalation Tool{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <h1 class="text-3xl font-extrabold text-walmart-blue flex items-center">
+        <svg class="w-8 h-8 mr-3 text-walmart-spark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        FC Capacity Dashboard
+    </h1>
+    <p class="text-gray-600 mt-2">Real-time trailer yard status and historical velocity to optimize inbound routing.</p>
+</div>
+
+{% if capacity_data %}
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        {% include "partials/fc_capacity_table.html" %}
+    </div>
+{% else %}
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden" hx-get="/fc-capacity/data" hx-trigger="load">
+        <div class="p-12 text-center">
+            <div class="inline-block animate-spin-spark w-12 h-12 mb-4">
+                <svg viewBox="0 0 100 100" class="w-full h-full">
+                    <g fill="#ffc220" transform="translate(50,50)">
+                        <rect x="-4" y="-45" width="8" height="38" rx="4"/>
+                        <rect x="-4" y="-45" width="8" height="38" rx="4" transform="rotate(60)"/>
+                        <rect x="-4" y="-45" width="8" height="38" rx="4" transform="rotate(120)"/>
+                        <rect x="-4" y="-45" width="8" height="38" rx="4" transform="rotate(180)"/>
+                        <rect x="-4" y="-45" width="8" height="38" rx="4" transform="rotate(240)"/>
+                        <rect x="-4" y="-45" width="8" height="38" rx="4" transform="rotate(300)"/>
+                    </g>
+                </svg>
+            </div>
+            <p class="text-lg text-gray-600 font-semibold">Querying ETUP Real-Time Trailer Data...</p>
+            <p class="text-sm text-gray-400 mt-2">This measures WFS vs Total network capacity and takes about 10-15 seconds.</p>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}

@@ -25,6 +25,6 @@ if ! gcloud auth application-default print-access-token &>/dev/null; then
 fi
 
 echo "✅ GCloud authenticated"
-echo "🚀 Starting on http://localhost:${APP_PORT:-8765}"
+echo "🚀 Starting on http://localhost:${APP_PORT:-8766}"
 
-uvicorn main:app --port "${APP_PORT:-8765}"
+uvicorn main:app --port "${APP_PORT:-8766}"

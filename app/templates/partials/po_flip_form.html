@@ -1,103 +1,303 @@
-<form hx-post="/po-flip/submit" hx-target="#submit-result" hx-indicator="#submit-spinner" class="space-y-4">
-    <div class="grid grid-cols-2 gap-4">
-        <div>
-            <label class="block font-semibold text-gray-700 mb-1">PO Number</label>
-            <input type="text" name="po_number" value="{{ po_number }}" readonly class="w-full border rounded p-2 bg-gray-100" />
-        </div>
-        <div>
-            <label class="block font-semibold text-gray-700 mb-1">PID</label>
-            <input type="text" name="pid" value="{{ pid }}" readonly class="w-full border rounded p-2 bg-gray-100" />
-        </div>
-        <div>
-            <label class="block font-semibold text-gray-700 mb-1">Seller Name</label>
-            <input type="text" name="seller_name" value="{{ seller_name }}" readonly class="w-full border rounded p-2 bg-gray-100" />
-        </div>
-        <div>
-            <label class="block font-semibold text-gray-700 mb-1">AM Name</label>
-            <input type="text" name="am_name" value="{{ am_name }}" readonly class="w-full border rounded p-2 bg-gray-100" />
-        </div>
-        <div>
-            <label class="block font-semibold text-gray-700 mb-1">AM Email</label>
-            <input type="email" name="am_email" value="{{ am_email }}" readonly class="w-full border rounded p-2 bg-gray-100" />
-        </div>
-        <div>
-            <label class="block font-semibold text-gray-700 mb-1">Assigned FC</label>
-            <input type="text" name="assigned_fc" value="{{ assigned_fc }}" readonly class="w-full border rounded p-2 bg-gray-100" />
-        </div>
-        <div>
-            <label class="block font-semibold text-gray-700 mb-1">Units</label>
-            <input type="number" name="total_units" value="{{ total_units }}" readonly class="w-full border rounded p-2 bg-gray-100" />
-        </div>
-        <div>
-            <label class="block font-semibold text-gray-700 mb-1">PO GMV</label>
-            <input type="number" step="0.01" name="total_gmv" value="{{ total_gmv }}" readonly class="w-full border rounded p-2 bg-gray-100" />
-        </div>
-        <div>
-            <label class="block font-semibold text-gray-700 mb-1">Key Assortment / L3</label>
-            <input type="text" name="l3_category" value="{{ l3_category }}" readonly class="w-full border rounded p-2 bg-gray-100" />
-        </div>
-        <div>
-            <label class="block font-semibold text-gray-700 mb-1">Delivery Date</label>
-            <input type="text" name="delivery_date" value="{{ delivery_date }}" readonly class="w-full border rounded p-2 bg-gray-100" />
-        </div>
-        <div>
-            <label class="block font-semibold text-gray-700 mb-1">WM Week</label>
-            <input type="number" name="wm_week" value="{{ wm_week }}" readonly class="w-full border rounded p-2 bg-gray-100" />
-        </div>
-        <div>
-            <label class="block font-semibold text-gray-700 mb-1">Hero Item</label>
-            <input type="text" name="hero_item" value="{{ hero_item }}" readonly class="w-full border rounded p-2 bg-gray-100" />
-        </div>
-    </div>
+<!-- Warning banner for non-flippable POs -->
+{% if warning %}
+{{ warning | safe }}
+{% endif %}
 
-    <div class="border-t pt-4 mt-6">
-        <h3 class="font-bold text-lg text-green-700 mb-4">Flip Request Details (Your Input):</h3>
-        <div class="grid grid-cols-2 gap-4">
-            <div>
-                <label class="block font-semibold text-gray-700 mb-1">Request FC <span class="text-red-600">*</span></label>
-                <select name="request_fc" required class="w-full border-2 border-green-500 rounded p-2">
-                    <option value="">-- Select FC --</option>
-                    {% for fc in wfs_fcs %}
-                    <option value="{{ fc }}">{{ fc }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div>
-                <label class="block font-semibold text-gray-700 mb-1">Event (if applicable)</label>
-                <input type="text" name="event" placeholder="Summer Event, etc." class="w-full border rounded p-2" />
-            </div>
-            <div>
-                <label class="block font-semibold text-gray-700 mb-1">AE Event? <span class="text-red-600">*</span></label>
-                <select name="ae_event" required class="w-full border rounded p-2">
-                    <option value="N">No</option>
-                    <option value="Y">Yes</option>
-                </select>
-            </div>
-        </div>
-        <div class="mt-4">
-            <label class="block font-semibold text-gray-700 mb-1">Reason for Flip <span class="text-red-600">*</span></label>
-            <textarea name="reason" rows="3" required class="w-full border-2 border-green-500 rounded p-2" placeholder="Explain why this PO needs to flip..."></textarea>
-        </div>
-    </div>
-
-    <div class="flex justify-end mt-6">
-        <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-12 rounded-lg transition">
-            Submit Flip Request
+<!-- Tabs for each PO (5 per row) -->
+<div class="mb-6">
+    <div class="flex flex-wrap gap-2" role="tablist">
+        {% for po in pos %}
+        <button
+            type="button"
+            role="tab"
+            data-po="{{ po.po_num }}"
+            class="tab-button px-4 py-2 text-sm font-semibold rounded-lg border-2 transition w-1/5
+                   {% if loop.first %}active bg-green-100 border-green-600 text-green-800{% else %}bg-gray-100 border-transparent text-gray-600 hover:bg-gray-200{% endif %}"
+            onclick="switchTab('{{ po.po_num }}')"
+        >
+            <span class="tab-status" id="status-{{ po.po_num }}">⚪</span>
+            <span class="block truncate">{{ po.po_num }}</span>
         </button>
+        {% endfor %}
     </div>
-    <span id="submit-spinner" class="htmx-indicator mt-3 inline-flex items-center space-x-2">
-        <svg class="animate-spin-spark h-6 w-6 text-wmt-yellow" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-            <g>
-                <rect x="11" y="1" width="2" height="8" rx="1" />
-                <rect x="11" y="1" width="2" height="8" rx="1" transform="rotate(60 12 12)" />
-                <rect x="11" y="1" width="2" height="8" rx="1" transform="rotate(120 12 12)" />
-                <rect x="11" y="1" width="2" height="8" rx="1" transform="rotate(180 12 12)" />
-                <rect x="11" y="1" width="2" height="8" rx="1" transform="rotate(240 12 12)" />
-                <rect x="11" y="1" width="2" height="8" rx="1" transform="rotate(300 12 12)" />
-            </g>
-        </svg>
-        <span class="text-gray-600 font-medium">Writing to SharePoint...</span>
-    </span>
-</form>
+</div>
+
+<!-- Tab Content Panels -->
+<div id="tab-panels">
+    {% for po in pos %}
+    <div
+        id="panel-{{ po.po_num }}"
+        class="tab-panel {% if not loop.first %}hidden{% endif %}"
+        data-po="{{ po.po_num }}"
+    >
+        <div class="bg-white rounded-lg border border-gray-200 p-6">
+            <h3 class="text-xl font-bold text-green-700 mb-4">📋 PO: {{ po.po_num }}</h3>
+            
+            <!-- Read-only PO Info -->
+            <div class="grid grid-cols-2 gap-4 mb-6 bg-gray-50 p-4 rounded">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700">Seller ID</label>
+                    <p class="text-gray-900">{{ po.seller_id }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700">Seller Name</label>
+                    <p class="text-gray-900">{{ po.seller_display_name or po.seller_name }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700">AM Name</label>
+                    <p class="text-gray-900">{{ po.am_name or 'N/A' }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700">AM Email</label>
+                    <p class="text-gray-900">{{ po.am_email or 'N/A' }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700">Current FC</label>
+                    <p class="text-gray-900 font-bold">{{ po.current_fc }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700">Expected Delivery</label>
+                    <p class="text-gray-900">{{ po.expected_delivery_date }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700">Total Units</label>
+                    <p class="text-gray-900 font-bold">{{ po.total_units }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700">Total GMV</label>
+                    <p class="text-gray-900 font-bold">${{ "%.2f"|format(po.total_gmv) }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700">WM Week</label>
+                    <p class="text-gray-900">{{ po.wm_week or 'N/A' }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700">L3 Category</label>
+                    <p class="text-gray-900">{{ po.l3_category or 'N/A' }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700">Hero Item</label>
+                    <p class="text-gray-900">{{ 'Yes ⭐' if po.is_hero else 'No' }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700">Status</label>
+                    <p class="text-gray-900">{{ po.po_status }}</p>
+                </div>
+            </div>
+
+            <!-- Editable Fields -->
+            <div class="border-t pt-4">
+                <h4 class="font-bold text-lg text-green-700 mb-4">Flip Request Details:</h4>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-semibold text-gray-700 mb-1">Requested FC <span class="text-red-600">*</span></label>
+                        <select
+                            id="request-fc-{{ po.po_num }}"
+                            class="w-full border-2 border-green-500 rounded p-2"
+                            required
+                            onchange="validateTab('{{ po.po_num }}')"
+                        >
+                            <option value="">-- Select FC --</option>
+                            {% for fc in wfs_fcs %}
+                                {% set cap = capacity_lookup.get(fc, {}) %}
+                                {% if cap %}
+                                    <option value="{{ fc }}">
+                                        {{ fc }} {% if cap.status == 'High' %}🔴{% elif cap.status == 'Medium' %}🟡{% else %}🟢{% endif %} ({{ cap.wfs_on_yard }} WFS Yard, {{ cap.wfs_avg_dwell_hours }}h WFS Dwell)
+                                    </option>
+                                {% else %}
+                                    <option value="{{ fc }}">{{ fc }} ⚪ (No Yard Data)</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-gray-700 mb-1">Event (if applicable)</label>
+                        <input
+                            type="text"
+                            id="event-{{ po.po_num }}"
+                            placeholder="Summer Event, etc."
+                            class="w-full border rounded p-2"
+                        />
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-gray-700 mb-1">AE Event? <span class="text-red-600">*</span></label>
+                        <select
+                            id="ae-event-{{ po.po_num }}"
+                            class="w-full border rounded p-2"
+                            required
+                            onchange="validateTab('{{ po.po_num }}')"
+                        >
+                            <option value="N">No</option>
+                            <option value="Y">Yes</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <label class="block font-semibold text-gray-700 mb-1">Reason for Flip <span class="text-red-600">*</span></label>
+                    <textarea
+                        id="reason-{{ po.po_num }}"
+                        rows="3"
+                        class="w-full border-2 border-green-500 rounded p-2"
+                        placeholder="Explain why this PO needs to flip..."
+                        required
+                        onchange="validateTab('{{ po.po_num }}')"
+                    ></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Submit Button -->
+<div class="mt-8 flex justify-between items-center">
+    <div id="validation-error" class="text-red-600 font-semibold hidden"></div>
+    <button
+        type="button"
+        id="submit-all-btn"
+        onclick="submitAllFlips()"
+        class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-12 rounded-lg transition ml-auto"
+    >
+        Submit All Flip Requests
+    </button>
+</div>
 
 <div id="submit-result" class="mt-6"></div>
+
+<script>
+// Store PO data for submission
+const poData = {{ pos | tojson }};
+const wfsFcs = {{ wfs_fcs | tojson }};
+
+// Tab switching
+function switchTab(poNum) {
+    // Hide all panels
+    document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.add('hidden'));
+    
+    // Deactivate all tabs
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active', 'bg-green-100', 'border-green-600', 'text-green-800');
+        btn.classList.add('bg-gray-100', 'border-transparent', 'text-gray-600');
+    });
+    
+    // Show selected panel
+    document.getElementById(`panel-${poNum}`).classList.remove('hidden');
+    
+    // Activate selected tab
+    const activeTab = document.querySelector(`[data-po="${poNum}"]`);
+    activeTab.classList.add('active', 'bg-green-100', 'border-green-600', 'text-green-800');
+    activeTab.classList.remove('bg-gray-100', 'border-transparent', 'text-gray-600');
+}
+
+// Validate individual tab
+function validateTab(poNum) {
+    const requestFc = document.getElementById(`request-fc-${poNum}`).value;
+    const reason = document.getElementById(`reason-${poNum}`).value;
+    const aeEvent = document.getElementById(`ae-event-${poNum}`).value;
+    
+    const isValid = requestFc && reason.trim() && aeEvent;
+    
+    const statusIcon = document.getElementById(`status-${poNum}`);
+    if (isValid) {
+        statusIcon.textContent = '✅';
+        statusIcon.title = 'Ready to submit';
+    } else {
+        statusIcon.textContent = '⚪';
+        statusIcon.title = 'Incomplete';
+    }
+    
+    return isValid;
+}
+
+// Validate all tabs before submit
+function validateAllTabs() {
+    const requestor = document.getElementById('global-requestor').value.trim();
+    if (!requestor) {
+        return {valid: false, message: 'Please enter your name at the top of the form.'};
+    }
+    
+    const invalidTabs = [];
+    poData.forEach(po => {
+        if (!validateTab(po.po_num)) {
+            invalidTabs.push(po.po_num);
+        }
+    });
+    
+    if (invalidTabs.length > 0) {
+        return {
+            valid: false,
+            message: `Missing required fields in: ${invalidTabs.join(', ')}`
+        };
+    }
+    
+    return {valid: true};
+}
+
+// Submit all flip requests
+function submitAllFlips() {
+    const validation = validateAllTabs();
+    
+    if (!validation.valid) {
+        const errorDiv = document.getElementById('validation-error');
+        errorDiv.textContent = '❌ ' + validation.message;
+        errorDiv.classList.remove('hidden');
+        
+        // Scroll to first invalid tab
+        const firstInvalid = poData.find(po => !validateTab(po.po_num));
+        if (firstInvalid) {
+            switchTab(firstInvalid.po_num);
+        }
+        return;
+    }
+    
+    // Hide error
+    document.getElementById('validation-error').classList.add('hidden');
+    
+    // Gather all flip requests
+    const requestor = document.getElementById('global-requestor').value.trim();
+    const flipRequests = poData.map(po => {
+        // Use whatever name is in "Your Name" field, with AM email from PO data
+        return {
+            po_num: po.po_num,
+            seller_id: po.seller_id,
+            seller_name: po.seller_name,
+            am_name: po.am_name,
+            am_email: po.am_email,
+            current_fc: po.current_fc,
+            request_fc: document.getElementById(`request-fc-${po.po_num}`).value,
+            total_units: po.total_units,
+            total_gmv: po.total_gmv,
+            l3_category: po.l3_category,
+            delivery_date: po.expected_delivery_date,
+            wm_week: po.wm_week,
+            hero_item: po.is_hero ? 'Y' : 'N',
+            reason: document.getElementById(`reason-${po.po_num}`).value,
+            event: document.getElementById(`event-${po.po_num}`).value,
+            ae_event: document.getElementById(`ae-event-${po.po_num}`).value,
+            requestor: requestor
+        };
+    });
+    
+    // Show spinner
+    const submitBtn = document.getElementById('submit-all-btn');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<svg class="animate-spin h-5 w-5 inline mr-2" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Submitting...';
+    
+    // Submit via HTMX
+    htmx.ajax('POST', '/po-flip/submit-multi', {
+        target: '#submit-result',
+        swap: 'innerHTML',
+        values: {flip_requests: JSON.stringify(flipRequests)}
+    }).then(() => {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = 'Submit All Flip Requests';
+    });
+}
+
+// Initialize validation on page load
+document.addEventListener('DOMContentLoaded', () => {
+    poData.forEach(po => validateTab(po.po_num));
+});
+</script>

@@ -1,0 +1,62 @@
+<div class="overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">FC Name</th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status (WFS)</th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Trailers on Yard<br><span class="text-blue-600">WFS</span> / <span class="text-gray-500 font-normal">Total</span></th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Avg Dwell Time (Hrs)<br><span class="text-blue-600">WFS</span> / <span class="text-gray-500 font-normal">Total</span></th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">7D Velocity (Tr/Day)<br><span class="text-blue-600">WFS</span> / <span class="text-gray-500 font-normal">Total</span></th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">14D Velocity<br><span class="text-blue-600">WFS</span> / <span class="text-gray-500 font-normal">Total</span></th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">30D Velocity<br><span class="text-blue-600">WFS</span> / <span class="text-gray-500 font-normal">Total</span></th>
+            </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+            {% for row in capacity_data %}
+            <tr class="hover:bg-gray-50">
+                <td class="px-6 py-4 whitespace-nowrap font-semibold text-gray-900">{{ row.fc_name }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    {% if row.status == 'High' %}
+                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                            High (>30 WFS)
+                        </span>
+                    {% elif row.status == 'Medium' %}
+                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                            Medium (15-30 WFS)
+                        </span>
+                    {% else %}
+                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                            Low (<15 WFS)
+                        </span>
+                    {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap font-medium">
+                    <span class="text-blue-600">{{ row.wfs_on_yard }}</span> 
+                    <span class="text-gray-400">/</span> 
+                    <span class="text-gray-600">{{ row.trailers_on_yard }}</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap font-medium">
+                    <span class="text-blue-600">{{ row.wfs_avg_dwell_hours }}</span> 
+                    <span class="text-gray-400">/</span> 
+                    <span class="text-gray-600">{{ row.avg_dwell_hours }}</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap font-medium">
+                    <span class="text-blue-600">{{ row.wfs_velocity_7d }}</span> 
+                    <span class="text-gray-400">/</span> 
+                    <span class="text-gray-600">{{ row.velocity_7d }}</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap font-medium">
+                    <span class="text-blue-600">{{ row.wfs_velocity_14d }}</span> 
+                    <span class="text-gray-400">/</span> 
+                    <span class="text-gray-600">{{ row.velocity_14d }}</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap font-medium">
+                    <span class="text-blue-600">{{ row.wfs_velocity_30d }}</span> 
+                    <span class="text-gray-400">/</span> 
+                    <span class="text-gray-600">{{ row.velocity_30d }}</span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

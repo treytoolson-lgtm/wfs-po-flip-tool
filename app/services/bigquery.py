@@ -8,9 +8,140 @@ from google.cloud import bigquery
 from google.oauth2 import credentials as google_credentials
 import google.auth
 
+import time
 from config import get_settings
 
 log = logging.getLogger(__name__)
+
+import json
+import os
+
+# Local file to cache FC capacity data across uvicorn workers/reloads
+CACHE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "fc_capacity_cache.json")
+
+FC_CAPACITY_QUERY = """
+WITH wfs_deliveries AS (
+    SELECT DISTINCT DELIVERY_NUMBER 
+    FROM `wmt-wfs-analytics.WW_WFS_PROD_TABLES.WFS_IB_FC_DELIVERY_DETAILS`
+),
+trailer_base AS (
+    SELECT 
+        t.FC_NAME,
+        t.TRAILER_ID,
+        t.ARRIVAL_TS_LCL,
+        t.GATE_OUT_TS_LCL,
+        CASE WHEN w.DELIVERY_NUMBER IS NOT NULL THEN 1 ELSE 0 END as is_wfs
+    FROM `wmt-cp-prod.e2e_fmt_cp.ETUP_DC_TRAILERS` t
+    LEFT JOIN wfs_deliveries w ON t.DELIVERY_NUMBER = w.DELIVERY_NUMBER
+    WHERE t.FC_NAME IS NOT NULL 
+      AND (t.GATE_OUT_TS_LCL IS NULL OR t.GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY))
+),
+current_yard AS (
+    SELECT 
+        FC_NAME,
+        COUNT(DISTINCT TRAILER_ID) AS trailers_on_yard,
+        COUNT(DISTINCT CASE WHEN is_wfs = 1 THEN TRAILER_ID END) AS wfs_on_yard,
+        ROUND(AVG(DATETIME_DIFF(CURRENT_DATETIME(), ARRIVAL_TS_LCL, HOUR)), 1) AS avg_dwell_hours,
+        ROUND(AVG(CASE WHEN is_wfs = 1 THEN DATETIME_DIFF(CURRENT_DATETIME(), ARRIVAL_TS_LCL, HOUR) END), 1) AS wfs_avg_dwell_hours
+    FROM trailer_base
+    WHERE GATE_OUT_TS_LCL IS NULL
+      AND ARRIVAL_TS_LCL IS NOT NULL
+    GROUP BY FC_NAME
+),
+velocity_data AS (
+    SELECT 
+        FC_NAME,
+        ROUND(COUNT(DISTINCT CASE WHEN GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 7 DAY) THEN TRAILER_ID END) / 7.0, 1) AS velocity_7d,
+        ROUND(COUNT(DISTINCT CASE WHEN is_wfs = 1 AND GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 7 DAY) THEN TRAILER_ID END) / 7.0, 1) AS wfs_velocity_7d,
+        ROUND(COUNT(DISTINCT CASE WHEN GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 14 DAY) THEN TRAILER_ID END) / 14.0, 1) AS velocity_14d,
+        ROUND(COUNT(DISTINCT CASE WHEN is_wfs = 1 AND GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 14 DAY) THEN TRAILER_ID END) / 14.0, 1) AS wfs_velocity_14d,
+        ROUND(COUNT(DISTINCT CASE WHEN GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY) THEN TRAILER_ID END) / 30.0, 1) AS velocity_30d,
+        ROUND(COUNT(DISTINCT CASE WHEN is_wfs = 1 AND GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY) THEN TRAILER_ID END) / 30.0, 1) AS wfs_velocity_30d
+    FROM trailer_base
+    WHERE GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY)
+    GROUP BY FC_NAME
+)
+SELECT 
+    c.FC_NAME as fc_name,
+    c.trailers_on_yard,
+    c.wfs_on_yard,
+    c.avg_dwell_hours,
+    c.wfs_avg_dwell_hours,
+    v.velocity_7d,
+    v.wfs_velocity_7d,
+    v.velocity_14d,
+    v.wfs_velocity_14d,
+    v.velocity_30d,
+    v.wfs_velocity_30d,
+    -- Status Logic based on WFS trailers
+    CASE 
+        WHEN c.wfs_on_yard > 30 THEN 'High'
+        WHEN c.wfs_on_yard >= 15 THEN 'Medium'
+        ELSE 'Low'
+    END as status
+FROM current_yard c
+LEFT JOIN velocity_data v ON c.FC_NAME = v.FC_NAME
+ORDER BY c.wfs_on_yard DESC
+"""
+
+def _read_cache() -> dict:
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            log.error(f"Failed to read cache file: {e}")
+            return {"time": 0, "data": []}
+    return {"time": 0, "data": []}
+
+def is_fc_capacity_cached() -> bool:
+    """Check if we have valid unexpired cache data."""
+    cache = _read_cache()
+    return bool(cache["data"] and (time.time() - cache["time"] < 900))
+
+def get_fc_capacity() -> list[dict[str, Any]]:
+    """
+    Fetch real-time FC capacity metrics from ETUP_DC_TRAILERS.
+    Returns a list of dictionaries with yard counts, dwell times, and velocity.
+    Caches the result to a file for 15 minutes to survive uvicorn reloads.
+    """
+    current_time = time.time()
+    
+    # Return cached data if younger than 15 minutes (900 seconds)
+    if is_fc_capacity_cached():
+        log.info("Returning FC capacity data from file cache (15 min TTL).")
+        return _read_cache()["data"]
+
+    client = _get_client()
+    log.info("Fetching real-time FC capacity data from BigQuery...")
+    job = client.query(FC_CAPACITY_QUERY)
+    rows = list(job.result())
+    
+    capacity_data = []
+    for r in rows:
+        capacity_data.append({
+            "fc_name": r["fc_name"],
+            "trailers_on_yard": r["trailers_on_yard"],
+            "wfs_on_yard": r["wfs_on_yard"] or 0,
+            "avg_dwell_hours": r["avg_dwell_hours"],
+            "wfs_avg_dwell_hours": r["wfs_avg_dwell_hours"] or 0,
+            "velocity_7d": r["velocity_7d"],
+            "wfs_velocity_7d": r["wfs_velocity_7d"] or 0,
+            "velocity_14d": r["velocity_14d"],
+            "wfs_velocity_14d": r["wfs_velocity_14d"] or 0,
+            "velocity_30d": r["velocity_30d"],
+            "wfs_velocity_30d": r["wfs_velocity_30d"] or 0,
+            "status": r["status"]
+        })
+    
+    # Update cache file
+    try:
+        with open(CACHE_FILE, "w") as f:
+            json.dump({"time": current_time, "data": capacity_data}, f)
+    except Exception as e:
+        log.warning(f"Failed to write cache file: {e}")
+        
+    return capacity_data
 
 # Master SQL — Updated 2026-03-25
 # - Fixed cartesian product duplicates (validated vs Seller Center)
@@ -239,3 +370,118 @@ def query_placed_orders(facility_nm: str, wm_yr_wk_nbr: int) -> dict[str, Any]:
     job = client.query(PLACED_ORDERS_QUERY, job_config=job_config)
     rows = list(job.result())
     return dict(rows[0]) if rows else {"placed_po_count": 0, "total_cases": 0}
+
+
+# ============================================================================
+# PO FLIP QUERY (Pre-Transit POs from Inbound_Sandbox)
+# ============================================================================
+
+FLIP_QUERY = """
+SELECT
+  i.po_num,
+  i.prtnr_id AS seller_id,
+  i.prtnr_nm AS seller_name,
+  COALESCE(am.diplay_name, i.prtnr_nm) AS seller_display_name,
+  COALESCE(am.am_name, 'N/A') AS am_name,
+  COALESCE(am.wfs_am_email, 'N/A') AS am_email,
+  i.offr_id AS item_id,
+  CASE WHEN i.tot_units > 0 THEN i.tot_units ELSE i.total_qty END AS units,
+  i.fc AS current_fc,
+  CAST(i.expctd_dlvry_dt AS DATE) AS expected_delivery_date,
+  i.po_status,
+  CAST(i.wm_week_nbr AS INT64) AS wm_week,
+  i.carrier_nm,
+  i.freight_class,
+  p.rpt_lvl_3_nm AS l3_category,
+  p.price_amt AS price_per_unit
+FROM `wmt-wfs-analytics.WW_WFS_PROD_TABLES.Inbound_Sandbox` i
+LEFT JOIN `wmt-wfs-analytics.WW_MP_DS_MODELS.preproc_offer_detl` p
+  ON i.offr_id = p.offr_id
+  AND CAST(p.rpt_dt AS DATE) >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
+LEFT JOIN `wmt-wfs-analytics.wfs_ops_analytics.mat_mpoa_seller_mart` am
+  ON CAST(i.prtnr_id AS STRING) = CAST(am.partner_id AS STRING)
+WHERE i.po_num IN UNNEST(@po_numbers)
+  AND i.po_status NOT IN ('DELIVERED', 'RECEIVED', 'CANCELLED')
+QUALIFY ROW_NUMBER() OVER (PARTITION BY i.offr_id ORDER BY p.rpt_dt DESC) = 1
+ORDER BY i.po_num, i.offr_id
+"""
+
+
+def query_flip_pos(po_numbers: list[str]) -> dict[str, Any]:
+    """
+    Query pre-transit POs from Inbound_Sandbox for flip requests.
+    Returns dict with:
+      - flippable: List of PO data (status = CREATED/CONFIRMED/SUBMITTED)
+      - non_flippable: List of PO numbers that can't be flipped (wrong status)
+      - items: Item-level rows
+    """
+    client = _get_client()
+
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ArrayQueryParameter("po_numbers", "STRING", po_numbers),
+        ]
+    )
+
+    log.info("Running flip query for POs: %s", po_numbers)
+    job = client.query(FLIP_QUERY, job_config=job_config)
+    rows = list(job.result())
+    log.info("Flip query returned %d rows for %d PO(s)", len(rows), len(po_numbers))
+
+    items = [dict(r) for r in rows]
+    
+    # Group items by PO
+    po_data = {}
+    for item in items:
+        po_num = item["po_num"]
+        units = item.get("units") or 0
+        price_str = item.get("price_per_unit") or "0"
+        
+        # Try to convert price to float
+        try:
+            price = float(price_str) if price_str else 0.0
+        except (ValueError, TypeError):
+            price = 0.0
+        
+        item_gmv = round(price * units, 2)
+        
+        if po_num not in po_data:
+            po_data[po_num] = {
+                "po_num": po_num,
+                "seller_id": item["seller_id"],
+                "seller_name": item["seller_name"],
+                "seller_display_name": item.get("seller_display_name") or item["seller_name"],
+                "am_name": item["am_name"],
+                "am_email": item["am_email"],
+                "current_fc": item["current_fc"],
+                "expected_delivery_date": str(item["expected_delivery_date"])[:10] if item.get("expected_delivery_date") else "",
+                "po_status": item["po_status"],
+                "carrier_nm": item.get("carrier_nm") or "",
+                "wm_week": item.get("wm_week") or 0,
+                "l3_category": item.get("l3_category") or "N/A",
+                "total_units": 0,
+                "total_gmv": 0.0,
+                "is_hero": False,
+                "items": []
+            }
+        
+        # Aggregate
+        po_data[po_num]["total_units"] += units
+        po_data[po_num]["total_gmv"] += item_gmv
+        
+        po_data[po_num]["items"].append({
+            "item_id": item["item_id"],
+            "units": units,
+            "gmv": item_gmv
+        })
+    
+    # Separate flippable vs non-flippable
+    flippable = list(po_data.values())
+    found_pos = set(po_data.keys())
+    non_flippable = [po for po in po_numbers if po not in found_pos]
+    
+    return {
+        "flippable": flippable,
+        "non_flippable": non_flippable,
+        "items": items
+    }
