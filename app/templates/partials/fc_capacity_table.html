@@ -107,13 +107,13 @@
                     {{ row.wfs_velocity_14d }} / {{ row.wfs_velocity_30d }}
                 </td>
 
-                {# IB UPH — sourced from uph_cache, merged in route (Fix 3) #}
+                {# IB UPH — sourced from uph_cache, merged in via _get_capacity_with_uph() #}
                 <td class="px-4 py-3 whitespace-nowrap font-semibold
                     {% if row.avg_ib_uph and row.avg_ib_uph >= 80 %}text-green-700
                     {% elif row.avg_ib_uph and row.avg_ib_uph >= 50 %}text-yellow-700
                     {% elif row.avg_ib_uph %}text-red-700
                     {% else %}text-gray-400{% endif %}">
-                    {% if row.avg_ib_uph is not none %}{{ row.avg_ib_uph | int }}{% else %}&mdash;{% endif %}
+                    {% if row.avg_ib_uph %}{{ row.avg_ib_uph | int }}{% else %}&mdash;{% endif %}
                 </td>
 
             </tr>

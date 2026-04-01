@@ -21,6 +21,24 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
+
+def _get_capacity_with_uph() -> list[dict]:
+    """Return capacity rows with avg_ib_uph merged in.
+
+    Both the SSR path (fc_capacity_page) and the HTMX data endpoint
+    (fc_capacity_data) must go through here so the template always gets
+    a row with avg_ib_uph — missing key = Jinja2 Undefined ≠ None crash.
+    """
+    capacity_data = get_all_fc_statuses()
+    uph_lookup = {
+        (r.get("fc_name_raw") or "").lower(): r
+        for r in get_all_fc_uph()
+    }
+    for row in capacity_data:
+        fc_lower = (row.get("fc_name") or "").lower()
+        row["avg_ib_uph"] = (uph_lookup.get(fc_lower) or {}).get("avg_ib_uph")
+    return capacity_data
+
 # All 31 WFS FCs from the build spec
 WFS_FCS = [
     "ATL1s","ATL2n","ATL3","BNA1n","CVG1n","DFW2n","DFW5s","DFW6s",
@@ -43,28 +61,18 @@ async def po_flip_page(request: Request):
 async def fc_capacity_page(request: Request):
     if is_capacity_cached():
         return templates.TemplateResponse(
-            "fc_capacity.html", {"request": request, "capacity_data": get_all_fc_statuses()}
+            "fc_capacity.html", {"request": request, "capacity_data": _get_capacity_with_uph()}
         )
-    # Render the shell; data loads via HTMX
+    # Cache cold — render shell; HTMX loads data once cache warms
     return templates.TemplateResponse(
         "fc_capacity.html", {"request": request}
     )
 
 @router.get("/fc-capacity/data", response_class=HTMLResponse)
 async def fc_capacity_data(request: Request):
-    capacity_data = get_all_fc_statuses()
-
-    # Merge IB UPH (Fix 3 — was querying BQ every 6h but displaying nothing)
-    uph_lookup = {
-        (r.get("fc_name_raw") or "").lower(): r
-        for r in get_all_fc_uph()
-    }
-    for row in capacity_data:
-        fc_lower = (row.get("fc_name") or "").lower()
-        row["avg_ib_uph"] = (uph_lookup.get(fc_lower) or {}).get("avg_ib_uph")
-
     return templates.TemplateResponse(
-        "partials/fc_capacity_table.html", {"request": request, "capacity_data": capacity_data}
+        "partials/fc_capacity_table.html",
+        {"request": request, "capacity_data": _get_capacity_with_uph()},
     )
 
 
