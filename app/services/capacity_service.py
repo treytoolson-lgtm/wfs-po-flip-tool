@@ -32,7 +32,16 @@ UPH_CACHE_FILE      = os.path.join(_ROOT, "uph_cache.json")
 
 # ── TTLs ─────────────────────────────────────────────────────────────────────
 CAPACITY_TTL = 600    # 10 min — real-time yard data
-UPH_TTL      = 21600  # 6 hr  — weekly UPH, doesn’t change intra-day
+UPH_TTL      = 21600  # 6 hr  — weekly UPH, doesn't change intra-day
+
+# ── Schema guard — if cached rows are missing ANY of these keys the cache is
+#    treated as cold and a fresh BQ query is forced. Bump this set whenever
+#    _build_capacity_row in bigquery.py gains or loses fields.
+_REQUIRED_CAPACITY_KEYS: frozenset[str] = frozenset({
+    "fc_name", "wfs_on_yard", "days_to_clear",
+    "wfs_waiting_to_unload", "wfs_currently_unloading",
+    "wfs_waiting_ratio_pct", "status",
+})
 
 # ── Locks — one per cache, prevents concurrent BQ double-fire ─────────────────
 _capacity_lock = threading.Lock()
@@ -64,8 +73,19 @@ def _write_json(path: str, data: list) -> None:
 
 
 def _is_fresh(path: str, ttl: int) -> bool:
+    """True if the cache file exists, is within TTL, and passes the schema guard."""
     cache = _read_json(path)
-    return bool(cache["data"] and (time.time() - cache["time"] < ttl))
+    if not cache["data"] or time.time() - cache["time"] >= ttl:
+        return False
+    # Schema guard: only for capacity cache. If required keys are missing
+    # (stale pre-Phase-1 file) treat the cache as cold and force a BQ refresh.
+    if path == CAPACITY_CACHE_FILE:
+        first = cache["data"][0]
+        missing = _REQUIRED_CAPACITY_KEYS - set(first.keys())
+        if missing:
+            log.warning("Capacity cache schema mismatch — missing fields: %s. Forcing refresh.", missing)
+            return False
+    return True
 
 
 # ── FC Capacity (real-time yard data) ────────────────────────────────────────
@@ -80,7 +100,7 @@ def refresh_capacity_cache() -> None:
         _write_json(CAPACITY_CACHE_FILE, data)
         log.info("FC capacity cache refreshed — %d FCs", len(data))
     except Exception as e:
-        log.error("FC capacity cache refresh failed: %s", e)
+        log.error("FC capacity cache refresh failed: %s", e, exc_info=True)
 
 
 def get_all_fc_statuses() -> list[dict[str, Any]]:
@@ -134,7 +154,7 @@ def refresh_uph_cache() -> None:
         _write_json(UPH_CACHE_FILE, data)
         log.info("UPH cache refreshed — %d FCs", len(data))
     except Exception as e:
-        log.error("UPH cache refresh failed: %s", e)
+        log.error("UPH cache refresh failed: %s", e, exc_info=True)
 
 
 def get_all_fc_uph() -> list[dict[str, Any]]:

@@ -100,13 +100,17 @@ async def lifespan(application: FastAPI):
     # cache fills in ~20s without blocking any requests.
     def _background_warm() -> None:
         try:
+            log.info("[STARTUP] Warming FC capacity cache...")
             _sync_refresh_capacity()
+            log.info("[STARTUP] FC capacity cache warmed successfully.")
         except Exception as e:
-            log.warning("Background capacity warm failed: %s", e)
+            log.error("[STARTUP] FC capacity warm FAILED: %s", e, exc_info=True)
         try:
+            log.info("[STARTUP] Warming UPH cache...")
             _sync_refresh_uph()
+            log.info("[STARTUP] UPH cache warmed successfully.")
         except Exception as e:
-            log.warning("Background UPH warm failed: %s", e)
+            log.error("[STARTUP] UPH warm FAILED: %s", e, exc_info=True)
 
     threading.Thread(target=_background_warm, daemon=True, name="cache-warm").start()
     log.info("Cache warming started in background — app ready immediately.")
