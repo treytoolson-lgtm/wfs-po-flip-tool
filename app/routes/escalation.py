@@ -9,10 +9,25 @@ from fastapi.templating import Jinja2Templates
 from app.services.bigquery import query_po_numbers
 from app.services.capacity_service import get_fc_status
 from app.services.escalation_logic import analyze_escalation
+from app.services.trailer_service import get_trailer_context
 
 log = logging.getLogger(__name__)
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+
+
+@router.get("/escalation/trailer-context/{trailer_id}", response_class=HTMLResponse)
+async def escalation_trailer_context(request: Request, trailer_id: str, po_num: str = ""):
+    """HTMX lazy-load endpoint: trailer co-load GMV context panel."""
+    try:
+        ctx = get_trailer_context(trailer_id, current_po_num=po_num)
+    except Exception as e:
+        log.warning("Trailer context endpoint error: %s", e)
+        ctx = None
+    return templates.TemplateResponse(
+        "partials/trailer_context.html",
+        {"request": request, "ctx": ctx, "trailer_id": trailer_id},
+    )
 
 
 @router.get("/escalation", response_class=HTMLResponse)

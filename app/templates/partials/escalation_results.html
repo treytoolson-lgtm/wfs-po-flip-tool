@@ -15,6 +15,19 @@
         </div>
     </div>
 
+    <!-- Trailer Co-load Context (lazy-loaded — doesn't block the verdict) -->
+    {% if sample.TRAILER_ID %}
+    <div
+        hx-get="/escalation/trailer-context/{{ sample.TRAILER_ID }}?po_num={{ result.po_num }}"
+        hx-trigger="revealed"
+        hx-swap="outerHTML"
+    >
+        <div class="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-400 animate-pulse">
+            ⏳ Loading trailer co-load context...
+        </div>
+    </div>
+    {% endif %}
+
     <!-- FC Congestion Context -->
     {% set fc = result.fc_status %}
     {% if fc %}

@@ -1,0 +1,54 @@
+{% if ctx %}
+<div class="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
+    <div class="flex items-center justify-between mb-3">
+        <span class="font-bold text-sm text-blue-800 uppercase tracking-wide">
+            🚛 Trailer {{ trailer_id }} — Co-load Context
+        </span>
+        <div class="flex gap-4 text-sm">
+            <span class="font-semibold text-blue-900">
+                {{ ctx.co_load_po_count }} other WFS PO{{ 's' if ctx.co_load_po_count != 1 else '' }} on this trailer
+            </span>
+            <span class="text-blue-700">
+                {{ "{:,}".format(ctx.trailer_total_units) }} total units
+            </span>
+            <span class="font-bold text-blue-900">
+                ${{ "{:,.0f}".format(ctx.trailer_total_gmv) }} total trailer GMV
+            </span>
+        </div>
+    </div>
+
+    {% if ctx.co_load_details %}
+    <details class="mt-2">
+        <summary class="cursor-pointer text-sm text-blue-700 hover:underline font-medium">
+            View co-load POs ({{ ctx.co_load_details | length }} shown)
+        </summary>
+        <div class="mt-3 overflow-x-auto">
+            <table class="w-full text-xs border border-blue-200 rounded">
+                <thead class="bg-blue-100">
+                    <tr>
+                        <th class="p-2 text-left text-blue-800">PO Number</th>
+                        <th class="p-2 text-left text-blue-800">Seller</th>
+                        <th class="p-2 text-right text-blue-800">Units</th>
+                        <th class="p-2 text-right text-blue-800">GMV</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-blue-100">
+                    {% for po in ctx.co_load_details %}
+                    <tr class="hover:bg-blue-50">
+                        <td class="p-2 font-mono font-semibold text-blue-900">{{ po.po_num }}</td>
+                        <td class="p-2 text-gray-700">{{ (po.seller_name or 'N/A')[:40] }}</td>
+                        <td class="p-2 text-right text-gray-800">{{ "{:,}".format(po.total_units or 0) }}</td>
+                        <td class="p-2 text-right font-semibold text-gray-900">${{ "{:,.0f}".format(po.gmv or 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+    {% elif ctx.co_load_po_count == 0 %}
+    <p class="text-sm text-blue-600 mt-1">No other WFS POs on this trailer — solo load.</p>
+    {% endif %}
+</div>
+{% else %}
+{# Render nothing — HTMX swaps outerHTML so missing ctx just disappears cleanly #}
+{% endif %}

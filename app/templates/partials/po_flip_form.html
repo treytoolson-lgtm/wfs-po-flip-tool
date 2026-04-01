@@ -31,9 +31,27 @@
         data-po="{{ po.po_num }}"
     >
         <div class="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 class="text-xl font-bold text-green-700 mb-4">📋 PO: {{ po.po_num }}</h3>
-            
-            <!-- Read-only PO Info -->
+            <h3 class="text-xl font-bold text-walmart-blue mb-4">📋 PO: {{ po.po_num }}</h3>
+
+            <!-- Source FC Congestion Badge -->
+            {% set src_cap = capacity_lookup.get(po.current_fc, {}) %}
+            {% if src_cap %}
+            <div class="mb-4 rounded-lg border p-3 text-sm flex items-center gap-3
+                {% if src_cap.status == 'High' %}border-red-300 bg-red-50 text-red-800
+                {% elif src_cap.status == 'Medium' %}border-yellow-300 bg-yellow-50 text-yellow-800
+                {% else %}border-green-200 bg-green-50 text-green-800{% endif %}">
+                <span class="font-bold">
+                    {% if src_cap.status == 'High' %}🔴 Source FC {{ po.current_fc }} — HIGH congestion
+                    {% elif src_cap.status == 'Medium' %}🟡 Source FC {{ po.current_fc }} — MEDIUM congestion
+                    {% else %}🟢 Source FC {{ po.current_fc }} — Low congestion{% endif %}
+                </span>
+                <span class="text-xs opacity-75">
+                    {% if src_cap.days_to_clear is not none %}{{ src_cap.days_to_clear }}d to clear &bull; {% endif %}
+                    {{ src_cap.wfs_on_yard }} WFS on yard &bull;
+                    {{ src_cap.wfs_avg_dwell_hours }}h avg dwell
+                </span>
+            </div>
+            {% endif %}
             <div class="grid grid-cols-2 gap-4 mb-6 bg-gray-50 p-4 rounded">
                 <div>
                     <label class="block text-sm font-semibold text-gray-700">Seller ID</label>
@@ -94,22 +112,24 @@
                         <label class="block font-semibold text-gray-700 mb-1">Requested FC <span class="text-red-600">*</span></label>
                         <select
                             id="request-fc-{{ po.po_num }}"
-                            class="w-full border-2 border-green-500 rounded p-2"
+                            class="w-full border-2 border-walmart-blue rounded p-2"
                             required
-                            onchange="validateTab('{{ po.po_num }}')"
+                            onchange="onTargetFcChange('{{ po.po_num }}'); validateTab('{{ po.po_num }}')"
                         >
                             <option value="">-- Select FC --</option>
                             {% for fc in wfs_fcs %}
                                 {% set cap = capacity_lookup.get(fc, {}) %}
                                 {% if cap %}
                                     <option value="{{ fc }}">
-                                        {{ fc }} {% if cap.status == 'High' %}🔴{% elif cap.status == 'Medium' %}🟡{% else %}🟢{% endif %} ({{ cap.wfs_on_yard }} WFS Yard, {{ cap.wfs_avg_dwell_hours }}h WFS Dwell)
+                                        {{ fc }} {% if cap.status == 'High' %}🔴{% elif cap.status == 'Medium' %}🟡{% else %}🟢{% endif %} ({{ cap.wfs_on_yard }} WFS, {{ cap.wfs_avg_dwell_hours }}h dwell)
                                     </option>
                                 {% else %}
-                                    <option value="{{ fc }}">{{ fc }} ⚪ (No Yard Data)</option>
+                                    <option value="{{ fc }}">{{ fc }} ⚪ (No yard data)</option>
                                 {% endif %}
                             {% endfor %}
                         </select>
+                        <!-- Target FC inline congestion warning -->
+                        <div id="fc-warning-{{ po.po_num }}" class="hidden mt-2 rounded border p-2 text-sm font-medium"></div>
                     </div>
                     <div>
                         <label class="block font-semibold text-gray-700 mb-1">Event (if applicable)</label>
@@ -167,9 +187,40 @@
 <div id="submit-result" class="mt-6"></div>
 
 <script>
-// Store PO data for submission
+// Store PO data and capacity lookup for submission + FC warning logic
 const poData = {{ pos | tojson }};
 const wfsFcs = {{ wfs_fcs | tojson }};
+const capacityLookup = {{ capacity_lookup | tojson }};
+
+// Show/hide target FC congestion warning when the dropdown changes
+function onTargetFcChange(poNum) {
+    const fc = document.getElementById(`request-fc-${poNum}`).value;
+    const warningDiv = document.getElementById(`fc-warning-${poNum}`);
+    const cap = capacityLookup[fc] || {};
+
+    if (!fc || !cap.status) {
+        warningDiv.classList.add('hidden');
+        warningDiv.textContent = '';
+        return;
+    }
+
+    const dtc  = cap.days_to_clear != null ? `${cap.days_to_clear}d to clear` : '';
+    const dwell = cap.wfs_avg_dwell_hours ? `${cap.wfs_avg_dwell_hours}h avg dwell` : '';
+    const detail = [dtc, dwell].filter(Boolean).join(' · ');
+
+    if (cap.status === 'High') {
+        warningDiv.className = 'mt-2 rounded border border-red-300 bg-red-50 text-red-800 p-2 text-sm font-medium';
+        warningDiv.innerHTML = `🔴 <strong>${fc}</strong> is HIGH congestion — ${detail}. Consider a lower-congestion FC.`;
+        warningDiv.classList.remove('hidden');
+    } else if (cap.status === 'Medium') {
+        warningDiv.className = 'mt-2 rounded border border-yellow-300 bg-yellow-50 text-yellow-800 p-2 text-sm font-medium';
+        warningDiv.innerHTML = `🟡 <strong>${fc}</strong> is MEDIUM congestion — ${detail}. Monitor closely.`;
+        warningDiv.classList.remove('hidden');
+    } else {
+        warningDiv.classList.add('hidden');
+        warningDiv.textContent = '';
+    }
+}
 
 // Tab switching
 function switchTab(poNum) {
