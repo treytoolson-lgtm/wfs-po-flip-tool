@@ -1,10 +1,7 @@
 from __future__ import annotations
-import json
 import logging
 import os
 import sys
-import threading
-import time
 from typing import Any
 
 from google.cloud import bigquery
@@ -16,7 +13,7 @@ from config import get_settings
 log = logging.getLogger(__name__)
 
 # Local file to cache FC capacity data across uvicorn workers/reloads
-CACHE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "fc_capacity_cache.json")
+
 
 FC_CAPACITY_QUERY = """
 WITH wfs_deliveries AS (
@@ -144,27 +141,6 @@ GROUP BY 1
 ORDER BY avg_ib_uph DESC
 """
 
-def _read_cache() -> dict:
-    if os.path.exists(CACHE_FILE):
-        try:
-            with open(CACHE_FILE, "r") as f:
-                return json.load(f)
-        except Exception as e:
-            log.error(f"Failed to read cache file: {e}")
-            return {"time": 0, "data": []}
-    return {"time": 0, "data": []}
-
-# Prevent concurrent BQ double-fire on cache miss
-_capacity_lock = threading.Lock()
-
-CAPACITY_TTL = 600   # 10 min — real-time yard data
-
-def is_fc_capacity_cached() -> bool:
-    """True if cache file is present and younger than CAPACITY_TTL."""
-    cache = _read_cache()
-    return bool(cache["data"] and (time.time() - cache["time"] < CAPACITY_TTL))
-
-
 def _build_capacity_row(r: Any) -> dict[str, Any]:
     """Map a BQ row to a serialisable dict with all new Phase-1 fields."""
     return {
@@ -195,35 +171,6 @@ def get_fc_capacity_raw() -> list[dict[str, Any]]:
     log.info("Fetching real-time FC capacity data from BigQuery...")
     job = client.query(FC_CAPACITY_QUERY)
     return [_build_capacity_row(r) for r in job.result()]
-
-
-def get_fc_capacity() -> list[dict[str, Any]]:
-    """
-    Fetch FC capacity metrics — file-cached at 10 min TTL.
-    Uses a threading.Lock to prevent concurrent BQ double-fire when the cache
-    is cold and multiple users hit the endpoint simultaneously.
-    """
-    if is_fc_capacity_cached():
-        log.info("FC capacity: serving from cache.")
-        return _read_cache()["data"]
-
-    with _capacity_lock:
-        # Double-check inside lock — another thread may have refreshed already
-        if is_fc_capacity_cached():
-            return _read_cache()["data"]
-
-        capacity_data = get_fc_capacity_raw()
-
-        # Atomic write: write to .tmp then rename — readers never see a partial file
-        tmp = CACHE_FILE + ".tmp"
-        try:
-            with open(tmp, "w") as f:
-                json.dump({"time": time.time(), "data": capacity_data}, f)
-            os.replace(tmp, CACHE_FILE)
-        except Exception as e:
-            log.warning("Failed to write capacity cache: %s", e)
-
-        return capacity_data
 
 
 def get_fc_uph_raw() -> list[dict[str, Any]]:

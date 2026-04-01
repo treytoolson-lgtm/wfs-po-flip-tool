@@ -1,6 +1,7 @@
 import contextlib
 import logging
 import os
+import threading
 
 import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -95,11 +96,20 @@ async def lifespan(application: FastAPI):
     scheduler.start()
     log.info("Scheduler started. Monitor hours (EST): %s", settings.monitor_hours)
 
-    # Warm both caches immediately on startup so the first user never waits
-    log.info("Warming FC capacity cache on startup...")
-    _sync_refresh_capacity()
-    log.info("Warming UPH cache on startup...")
-    _sync_refresh_uph()
+    # Warm both caches in background — app responds immediately,
+    # cache fills in ~20s without blocking any requests.
+    def _background_warm() -> None:
+        try:
+            _sync_refresh_capacity()
+        except Exception as e:
+            log.warning("Background capacity warm failed: %s", e)
+        try:
+            _sync_refresh_uph()
+        except Exception as e:
+            log.warning("Background UPH warm failed: %s", e)
+
+    threading.Thread(target=_background_warm, daemon=True, name="cache-warm").start()
+    log.info("Cache warming started in background — app ready immediately.")
 
     yield
     scheduler.shutdown()

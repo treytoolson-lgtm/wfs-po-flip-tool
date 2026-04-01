@@ -1,7 +1,7 @@
 """Shared FC capacity service.
 
 Single source of truth for FC congestion data across all three tool modes:
-- FC Capacity Dashboard  (bigquery.get_fc_capacity already covers this)
+- FC Capacity Dashboard  (served via get_all_fc_statuses + is_capacity_cached)
 - Escalation Lookup      (get_fc_status for verdict enrichment)
 - PO Flip Request        (get_fc_status for source/target congestion warnings)
 
@@ -90,6 +90,13 @@ def get_all_fc_statuses() -> list[dict[str, Any]]:
             if not _is_fresh(CAPACITY_CACHE_FILE, CAPACITY_TTL):  # double-check inside lock
                 refresh_capacity_cache()
     return _read_json(CAPACITY_CACHE_FILE)["data"]
+
+
+def is_capacity_cached() -> bool:
+    """True if the FC capacity cache exists and is younger than CAPACITY_TTL.
+    Used by the FC Capacity page to decide whether to SSR data or defer to HTMX.
+    """
+    return _is_fresh(CAPACITY_CACHE_FILE, CAPACITY_TTL)
 
 
 def get_fc_status(fc_name: str) -> dict[str, Any] | None:

@@ -31,6 +31,11 @@
                     14D / 30D Velocity
                     <div class="text-gray-500 font-normal normal-case">WFS tr/day</div>
                 </th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    IB UPH
+                    <span class="ml-1 text-gray-400 font-normal normal-case" title="Inbound Units Per Hour — 6-week rolling average. Higher = faster unload.">ⓘ</span>
+                    <div class="text-gray-500 font-normal normal-case">units/hr</div>
+                </th>
             </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
@@ -100,6 +105,15 @@
                 {# 14D / 30D WFS velocity #}
                 <td class="px-4 py-3 whitespace-nowrap text-gray-600">
                     {{ row.wfs_velocity_14d }} / {{ row.wfs_velocity_30d }}
+                </td>
+
+                {# IB UPH — sourced from uph_cache, merged in route (Fix 3) #}
+                <td class="px-4 py-3 whitespace-nowrap font-semibold
+                    {% if row.avg_ib_uph and row.avg_ib_uph >= 80 %}text-green-700
+                    {% elif row.avg_ib_uph and row.avg_ib_uph >= 50 %}text-yellow-700
+                    {% elif row.avg_ib_uph %}text-red-700
+                    {% else %}text-gray-400{% endif %}">
+                    {% if row.avg_ib_uph is not none %}{{ row.avg_ib_uph | int }}{% else %}&mdash;{% endif %}
                 </td>
 
             </tr>

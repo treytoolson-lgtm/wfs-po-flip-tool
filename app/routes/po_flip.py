@@ -7,7 +7,12 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app.services.bigquery import query_flip_pos, query_placed_orders, get_fc_capacity, is_fc_capacity_cached
+from app.services.bigquery import query_flip_pos, query_placed_orders
+from app.services.capacity_service import (
+    get_all_fc_statuses,
+    get_all_fc_uph,
+    is_capacity_cached,
+)
 from app.services.escalation_logic import _safe_float
 from app.services.sharepoint_writer import add_flip_request_to_sharepoint
 from app import database as db
@@ -36,20 +41,28 @@ async def po_flip_page(request: Request):
 
 @router.get("/fc-capacity", response_class=HTMLResponse)
 async def fc_capacity_page(request: Request):
-    if is_fc_capacity_cached():
+    if is_capacity_cached():
         return templates.TemplateResponse(
-            "fc_capacity.html", {"request": request, "capacity_data": get_fc_capacity()}
+            "fc_capacity.html", {"request": request, "capacity_data": get_all_fc_statuses()}
         )
-
-    # Just render the shell, data loads via HTMX
+    # Render the shell; data loads via HTMX
     return templates.TemplateResponse(
         "fc_capacity.html", {"request": request}
     )
 
 @router.get("/fc-capacity/data", response_class=HTMLResponse)
 async def fc_capacity_data(request: Request):
-    # Fetch the actual data
-    capacity_data = get_fc_capacity()
+    capacity_data = get_all_fc_statuses()
+
+    # Merge IB UPH (Fix 3 — was querying BQ every 6h but displaying nothing)
+    uph_lookup = {
+        (r.get("fc_name_raw") or "").lower(): r
+        for r in get_all_fc_uph()
+    }
+    for row in capacity_data:
+        fc_lower = (row.get("fc_name") or "").lower()
+        row["avg_ib_uph"] = (uph_lookup.get(fc_lower) or {}).get("avg_ib_uph")
+
     return templates.TemplateResponse(
         "partials/fc_capacity_table.html", {"request": request, "capacity_data": capacity_data}
     )
@@ -108,7 +121,7 @@ async def po_flip_lookup(
         '''
     
     # Render multi-PO tabbed form
-    capacity_data = get_fc_capacity()
+    capacity_data = get_all_fc_statuses()
     capacity_lookup = {item["fc_name"]: item for item in capacity_data}
     return templates.TemplateResponse(
         "partials/po_flip_form.html", 
@@ -120,8 +133,6 @@ async def po_flip_lookup(
             "capacity_lookup": capacity_lookup,
         }
     )
-    with open('/tmp/timings.txt', 'a') as f_out: f_out.write('Time in po_flip_page: ' + str(time.time() - t1) + '\n')
-    return res
 
 
 @router.post("/po-flip/submit-multi", response_class=HTMLResponse)
