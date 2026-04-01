@@ -34,7 +34,7 @@
             <h3 class="text-xl font-bold text-walmart-blue mb-4">📋 PO: {{ po.po_num }}</h3>
 
             <!-- Source FC Congestion Badge -->
-            {% set src_cap = capacity_lookup.get(po.current_fc, {}) %}
+            {% set src_cap = capacity_lookup.get(po.current_fc|lower, {}) %}
             {% if src_cap %}
             <div class="mb-4 rounded-lg border p-3 text-sm flex items-center gap-3
                 {% if src_cap.status == 'High' %}border-red-300 bg-red-50 text-red-800
@@ -118,7 +118,7 @@
                         >
                             <option value="">-- Select FC --</option>
                             {% for fc in wfs_fcs %}
-                                {% set cap = capacity_lookup.get(fc, {}) %}
+                                {% set cap = capacity_lookup.get(fc|lower, {}) %}
                                 {% if cap %}
                                     <option value="{{ fc }}">
                                         {{ fc }} {% if cap.status == 'High' %}🔴{% elif cap.status == 'Medium' %}🟡{% else %}🟢{% endif %} ({{ cap.wfs_on_yard }} WFS, {{ cap.wfs_avg_dwell_hours }}h dwell)
@@ -172,16 +172,21 @@
 </div>
 
 <!-- Submit Button -->
-<div class="mt-8 flex justify-between items-center">
-    <div id="validation-error" class="text-red-600 font-semibold hidden"></div>
-    <button
-        type="button"
-        id="submit-all-btn"
-        onclick="submitAllFlips()"
-        class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-12 rounded-lg transition ml-auto"
-    >
-        Submit All Flip Requests
-    </button>
+<div class="mt-8">
+    <div
+        id="validation-error"
+        class="hidden mb-4 bg-red-50 border-2 border-red-400 rounded-lg p-4 text-red-700 font-semibold text-sm"
+    ></div>
+    <div class="flex justify-end">
+        <button
+            type="button"
+            id="submit-all-btn"
+            onclick="submitAllFlips()"
+            class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-12 rounded-lg transition"
+        >
+            Submit All Flip Requests
+        </button>
+    </div>
 </div>
 
 <div id="submit-result" class="mt-6"></div>
@@ -196,7 +201,7 @@ const capacityLookup = {{ capacity_lookup | tojson }};
 function onTargetFcChange(poNum) {
     const fc = document.getElementById(`request-fc-${poNum}`).value;
     const warningDiv = document.getElementById(`fc-warning-${poNum}`);
-    const cap = capacityLookup[fc] || {};
+    const cap = capacityLookup[fc.toLowerCase()] || {};
 
     if (!fc || !cap.status) {
         warningDiv.classList.add('hidden');
@@ -292,8 +297,9 @@ function submitAllFlips() {
     
     if (!validation.valid) {
         const errorDiv = document.getElementById('validation-error');
-        errorDiv.textContent = '❌ ' + validation.message;
+        errorDiv.textContent = '\u274C ' + validation.message;
         errorDiv.classList.remove('hidden');
+        errorDiv.scrollIntoView({behavior: 'smooth', block: 'center'});
         
         // Scroll to first invalid tab
         const firstInvalid = poData.find(po => !validateTab(po.po_num));

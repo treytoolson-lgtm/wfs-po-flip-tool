@@ -40,8 +40,10 @@ def _get_capacity_with_uph() -> list[dict]:
     return capacity_data
 
 # All 31 WFS FCs from the build spec
+# FC names must match exactly what BigQuery returns in fc_name (case-insensitive
+# matching is handled by the lookup below — but these names are what show in the UI).
 WFS_FCS = [
-    "ATL1s","ATL2n","ATL3","BNA1n","CVG1n","DFW2n","DFW5s","DFW6s",
+    "ATL1s","ATL2n","ATL3n","ATL3s","BNA1s","CVG1n","DFW2n","DFW5s","DFW6s",
     "IND2T","IND2n","IND3s","KY1","LAX1s","LAX2n","LAX2T","MCI1n",
     "MCO1s","MEM1s","NJ3","NJ3T","ORD1s","PHL1s","PHL2n","PHL4n",
     "PHL5s","PHX1s","SLC1n","SMF1n","SMF1T",
@@ -128,9 +130,10 @@ async def po_flip_lookup(
         </div>
         '''
     
-    # Render multi-PO tabbed form
+    # Case-insensitive lookup: BQ returns mixed-case FC names (e.g. "IND2t")
+    # but WFS_FCS uses canonical casing (e.g. "IND2T"). Lower both sides.
     capacity_data = get_all_fc_statuses()
-    capacity_lookup = {item["fc_name"]: item for item in capacity_data}
+    capacity_lookup = {item["fc_name"].lower(): item for item in capacity_data}
     return templates.TemplateResponse(
         "partials/po_flip_form.html", 
         {
