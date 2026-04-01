@@ -119,7 +119,7 @@ SELECT
     END                                                                         AS status
 FROM current_yard c
 LEFT JOIN velocity_data v ON c.FC_NAME = v.FC_NAME
-ORDER BY c.wfs_on_yard DESC
+ORDER BY days_to_clear DESC NULLS LAST
 """
 
 # IB UPH — 5-week trailing average per FC. Weekly data, cached at 6h TTL.
