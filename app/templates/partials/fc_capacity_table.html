@@ -1,60 +1,107 @@
 <div class="overflow-x-auto">
-    <table class="min-w-full divide-y divide-gray-200">
+    <table class="min-w-full divide-y divide-gray-200 text-sm">
         <thead class="bg-gray-50">
             <tr>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">FC Name</th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status (WFS)</th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Trailers on Yard<br><span class="text-blue-600">WFS</span> / <span class="text-gray-500 font-normal">Total</span></th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Avg Dwell Time (Hrs)<br><span class="text-blue-600">WFS</span> / <span class="text-gray-500 font-normal">Total</span></th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">7D Velocity (Tr/Day)<br><span class="text-blue-600">WFS</span> / <span class="text-gray-500 font-normal">Total</span></th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">14D Velocity<br><span class="text-blue-600">WFS</span> / <span class="text-gray-500 font-normal">Total</span></th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">30D Velocity<br><span class="text-blue-600">WFS</span> / <span class="text-gray-500 font-normal">Total</span></th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">FC</th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Status
+                    <span class="ml-1 text-gray-400 font-normal normal-case" title="High: days-to-clear &gt;3 OR avg WFS dwell &gt;24h. Medium: DTC &gt;1.5 OR dwell &gt;12h. Low: otherwise.">ⓘ</span>
+                </th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Days to Clear
+                    <span class="ml-1 text-gray-400 font-normal normal-case" title="WFS trailers on yard ÷ 7-day WFS velocity. Primary congestion signal.">ⓘ</span>
+                </th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    WFS Trailers
+                    <div class="text-gray-500 font-normal normal-case">Waiting / Unloading / Total</div>
+                </th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Waiting %
+                    <span class="ml-1 text-gray-400 font-normal normal-case" title="% of WFS yard in ARV status (waiting, not yet docked).">ⓘ</span>
+                </th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Avg Dwell (hrs)
+                    <div class="text-gray-500 font-normal normal-case"><span class="text-blue-600">WFS</span> / Total</div>
+                </th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    7D Velocity
+                    <div class="text-gray-500 font-normal normal-case"><span class="text-blue-600">WFS</span> / Total</div>
+                </th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    14D / 30D Velocity
+                    <div class="text-gray-500 font-normal normal-case">WFS tr/day</div>
+                </th>
             </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
             {% for row in capacity_data %}
+            {%  set dtc = row.days_to_clear %}
             <tr class="hover:bg-gray-50">
-                <td class="px-6 py-4 whitespace-nowrap font-semibold text-gray-900">{{ row.fc_name }}</td>
-                <td class="px-6 py-4 whitespace-nowrap">
+
+                {# FC Name #}
+                <td class="px-4 py-3 whitespace-nowrap font-semibold text-gray-900">{{ row.fc_name }}</td>
+
+                {# Status badge — updated logic labels #}
+                <td class="px-4 py-3 whitespace-nowrap">
                     {% if row.status == 'High' %}
                         <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                            High (>30 WFS)
+                            🔴 High
                         </span>
                     {% elif row.status == 'Medium' %}
                         <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                            Medium (15-30 WFS)
+                            🟡 Medium
                         </span>
                     {% else %}
                         <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                            Low (<15 WFS)
+                            🟢 Low
                         </span>
                     {% endif %}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap font-medium">
-                    <span class="text-blue-600">{{ row.wfs_on_yard }}</span> 
-                    <span class="text-gray-400">/</span> 
-                    <span class="text-gray-600">{{ row.trailers_on_yard }}</span>
+
+                {# Days to Clear — colour-coded by urgency #}
+                <td class="px-4 py-3 whitespace-nowrap font-bold
+                    {% if dtc and dtc > 3 %}text-red-700
+                    {% elif dtc and dtc > 1.5 %}text-yellow-700
+                    {% else %}text-green-700{% endif %}">
+                    {% if dtc is not none %}{{ dtc }}d{% else %}&mdash;{% endif %}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap font-medium">
-                    <span class="text-blue-600">{{ row.wfs_avg_dwell_hours }}</span> 
-                    <span class="text-gray-400">/</span> 
+
+                {# WFS trailer split: Waiting / Unloading / Total #}
+                <td class="px-4 py-3 whitespace-nowrap">
+                    <span class="text-yellow-700 font-semibold" title="Waiting to unload (ARV)">{{ row.wfs_waiting_to_unload }}</span>
+                    <span class="text-gray-400 mx-1">/</span>
+                    <span class="text-green-700 font-semibold" title="Currently unloading (WRK)">{{ row.wfs_currently_unloading }}</span>
+                    <span class="text-gray-400 mx-1">/</span>
+                    <span class="text-blue-600 font-semibold" title="Total WFS on yard">{{ row.wfs_on_yard }}</span>
+                </td>
+
+                {# Waiting ratio % #}
+                <td class="px-4 py-3 whitespace-nowrap
+                    {% if row.wfs_waiting_ratio_pct and row.wfs_waiting_ratio_pct > 70 %}text-red-700 font-bold
+                    {% elif row.wfs_waiting_ratio_pct and row.wfs_waiting_ratio_pct > 50 %}text-yellow-700
+                    {% else %}text-gray-600{% endif %}">
+                    {% if row.wfs_waiting_ratio_pct is not none %}{{ row.wfs_waiting_ratio_pct }}%{% else %}&mdash;{% endif %}
+                </td>
+
+                {# Dwell hours WFS / Total #}
+                <td class="px-4 py-3 whitespace-nowrap">
+                    <span class="text-blue-600">{{ row.wfs_avg_dwell_hours }}</span>
+                    <span class="text-gray-400 mx-1">/</span>
                     <span class="text-gray-600">{{ row.avg_dwell_hours }}</span>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap font-medium">
-                    <span class="text-blue-600">{{ row.wfs_velocity_7d }}</span> 
-                    <span class="text-gray-400">/</span> 
+
+                {# 7D Velocity WFS / Total #}
+                <td class="px-4 py-3 whitespace-nowrap">
+                    <span class="text-blue-600">{{ row.wfs_velocity_7d }}</span>
+                    <span class="text-gray-400 mx-1">/</span>
                     <span class="text-gray-600">{{ row.velocity_7d }}</span>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap font-medium">
-                    <span class="text-blue-600">{{ row.wfs_velocity_14d }}</span> 
-                    <span class="text-gray-400">/</span> 
-                    <span class="text-gray-600">{{ row.velocity_14d }}</span>
+
+                {# 14D / 30D WFS velocity #}
+                <td class="px-4 py-3 whitespace-nowrap text-gray-600">
+                    {{ row.wfs_velocity_14d }} / {{ row.wfs_velocity_30d }}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap font-medium">
-                    <span class="text-blue-600">{{ row.wfs_velocity_30d }}</span> 
-                    <span class="text-gray-400">/</span> 
-                    <span class="text-gray-600">{{ row.velocity_30d }}</span>
-                </td>
+
             </tr>
             {% endfor %}
         </tbody>

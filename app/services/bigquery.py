@@ -1,70 +1,107 @@
 from __future__ import annotations
+import json
 import logging
 import os
 import sys
+import threading
+import time
 from typing import Any
 
 from google.cloud import bigquery
 from google.oauth2 import credentials as google_credentials
 import google.auth
 
-import time
 from config import get_settings
 
 log = logging.getLogger(__name__)
-
-import json
-import os
 
 # Local file to cache FC capacity data across uvicorn workers/reloads
 CACHE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "fc_capacity_cache.json")
 
 FC_CAPACITY_QUERY = """
 WITH wfs_deliveries AS (
-    SELECT DISTINCT DELIVERY_NUMBER 
+    SELECT DISTINCT DELIVERY_NUMBER
     FROM `wmt-wfs-analytics.WW_WFS_PROD_TABLES.WFS_IB_FC_DELIVERY_DETAILS`
 ),
 trailer_base AS (
-    SELECT 
+    SELECT
         t.FC_NAME,
         t.TRAILER_ID,
         t.ARRIVAL_TS_LCL,
         t.GATE_OUT_TS_LCL,
-        CASE WHEN w.DELIVERY_NUMBER IS NOT NULL THEN 1 ELSE 0 END as is_wfs
+        t.DELIVERY_STATUS,
+        CASE WHEN w.DELIVERY_NUMBER IS NOT NULL THEN 1 ELSE 0 END AS is_wfs
     FROM `wmt-cp-prod.e2e_fmt_cp.ETUP_DC_TRAILERS` t
     LEFT JOIN wfs_deliveries w ON t.DELIVERY_NUMBER = w.DELIVERY_NUMBER
-    WHERE t.FC_NAME IS NOT NULL 
-      AND (t.GATE_OUT_TS_LCL IS NULL OR t.GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY))
+    WHERE t.FC_NAME IS NOT NULL
+      AND (t.GATE_OUT_TS_LCL IS NULL
+           OR t.GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY))
 ),
 current_yard AS (
-    SELECT 
+    SELECT
         FC_NAME,
-        COUNT(DISTINCT TRAILER_ID) AS trailers_on_yard,
-        COUNT(DISTINCT CASE WHEN is_wfs = 1 THEN TRAILER_ID END) AS wfs_on_yard,
-        ROUND(AVG(DATETIME_DIFF(CURRENT_DATETIME(), ARRIVAL_TS_LCL, HOUR)), 1) AS avg_dwell_hours,
-        ROUND(AVG(CASE WHEN is_wfs = 1 THEN DATETIME_DIFF(CURRENT_DATETIME(), ARRIVAL_TS_LCL, HOUR) END), 1) AS wfs_avg_dwell_hours
+        COUNT(DISTINCT TRAILER_ID)                                              AS trailers_on_yard,
+        COUNT(DISTINCT CASE WHEN is_wfs = 1 THEN TRAILER_ID END)               AS wfs_on_yard,
+        -- Waiting vs actively unloading (WFS)
+        COUNT(DISTINCT CASE WHEN is_wfs = 1
+            AND UPPER(DELIVERY_STATUS) IN ('ARV','ARRIVED')
+            THEN TRAILER_ID END)                                                AS wfs_waiting_to_unload,
+        COUNT(DISTINCT CASE WHEN is_wfs = 1
+            AND UPPER(DELIVERY_STATUS) IN ('WRK','WORKING')
+            THEN TRAILER_ID END)                                                AS wfs_currently_unloading,
+        -- Total network (all sellers)
+        COUNT(DISTINCT CASE WHEN UPPER(DELIVERY_STATUS) IN ('ARV','ARRIVED')
+            THEN TRAILER_ID END)                                                AS waiting_to_unload,
+        COUNT(DISTINCT CASE WHEN UPPER(DELIVERY_STATUS) IN ('WRK','WORKING')
+            THEN TRAILER_ID END)                                                AS currently_unloading,
+        -- Dwell: cap at 336 hrs (14 days) to filter phantom/stranded trailers
+        ROUND(AVG(
+            CASE WHEN DATETIME_DIFF(CURRENT_DATETIME(), ARRIVAL_TS_LCL, HOUR) <= 336
+            THEN DATETIME_DIFF(CURRENT_DATETIME(), ARRIVAL_TS_LCL, HOUR) END
+        ), 1)                                                                   AS avg_dwell_hours,
+        ROUND(AVG(
+            CASE WHEN is_wfs = 1
+              AND DATETIME_DIFF(CURRENT_DATETIME(), ARRIVAL_TS_LCL, HOUR) <= 336
+            THEN DATETIME_DIFF(CURRENT_DATETIME(), ARRIVAL_TS_LCL, HOUR) END
+        ), 1)                                                                   AS wfs_avg_dwell_hours
     FROM trailer_base
     WHERE GATE_OUT_TS_LCL IS NULL
       AND ARRIVAL_TS_LCL IS NOT NULL
     GROUP BY FC_NAME
 ),
 velocity_data AS (
-    SELECT 
+    SELECT
         FC_NAME,
-        ROUND(COUNT(DISTINCT CASE WHEN GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 7 DAY) THEN TRAILER_ID END) / 7.0, 1) AS velocity_7d,
-        ROUND(COUNT(DISTINCT CASE WHEN is_wfs = 1 AND GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 7 DAY) THEN TRAILER_ID END) / 7.0, 1) AS wfs_velocity_7d,
-        ROUND(COUNT(DISTINCT CASE WHEN GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 14 DAY) THEN TRAILER_ID END) / 14.0, 1) AS velocity_14d,
-        ROUND(COUNT(DISTINCT CASE WHEN is_wfs = 1 AND GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 14 DAY) THEN TRAILER_ID END) / 14.0, 1) AS wfs_velocity_14d,
-        ROUND(COUNT(DISTINCT CASE WHEN GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY) THEN TRAILER_ID END) / 30.0, 1) AS velocity_30d,
-        ROUND(COUNT(DISTINCT CASE WHEN is_wfs = 1 AND GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY) THEN TRAILER_ID END) / 30.0, 1) AS wfs_velocity_30d
+        ROUND(COUNT(DISTINCT CASE WHEN GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 7 DAY)
+            THEN TRAILER_ID END) / 7.0, 1)                                     AS velocity_7d,
+        ROUND(COUNT(DISTINCT CASE WHEN is_wfs = 1
+            AND GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 7 DAY)
+            THEN TRAILER_ID END) / 7.0, 1)                                     AS wfs_velocity_7d,
+        ROUND(COUNT(DISTINCT CASE WHEN GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 14 DAY)
+            THEN TRAILER_ID END) / 14.0, 1)                                    AS velocity_14d,
+        ROUND(COUNT(DISTINCT CASE WHEN is_wfs = 1
+            AND GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 14 DAY)
+            THEN TRAILER_ID END) / 14.0, 1)                                    AS wfs_velocity_14d,
+        ROUND(COUNT(DISTINCT CASE WHEN GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY)
+            THEN TRAILER_ID END) / 30.0, 1)                                    AS velocity_30d,
+        ROUND(COUNT(DISTINCT CASE WHEN is_wfs = 1
+            AND GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY)
+            THEN TRAILER_ID END) / 30.0, 1)                                    AS wfs_velocity_30d
     FROM trailer_base
     WHERE GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY)
     GROUP BY FC_NAME
 )
-SELECT 
-    c.FC_NAME as fc_name,
+SELECT
+    c.FC_NAME                                                                   AS fc_name,
     c.trailers_on_yard,
     c.wfs_on_yard,
+    c.wfs_waiting_to_unload,
+    c.wfs_currently_unloading,
+    c.waiting_to_unload,
+    c.currently_unloading,
+    -- % of WFS yard sitting in ARV (waiting, not yet docked)
+    ROUND(SAFE_DIVIDE(c.wfs_waiting_to_unload, NULLIF(c.wfs_on_yard, 0)) * 100, 1)
+                                                                                AS wfs_waiting_ratio_pct,
     c.avg_dwell_hours,
     c.wfs_avg_dwell_hours,
     v.velocity_7d,
@@ -73,15 +110,38 @@ SELECT
     v.wfs_velocity_14d,
     v.velocity_30d,
     v.wfs_velocity_30d,
-    -- Status Logic based on WFS trailers
-    CASE 
-        WHEN c.wfs_on_yard > 30 THEN 'High'
-        WHEN c.wfs_on_yard >= 15 THEN 'Medium'
+    -- PRIMARY congestion metric: days at current velocity to clear what's on yard
+    ROUND(SAFE_DIVIDE(c.wfs_on_yard, NULLIF(v.wfs_velocity_7d, 0)), 1)         AS days_to_clear,
+    -- Smarter status: velocity-relative + dwell-based (not flat trailer count)
+    CASE
+        WHEN SAFE_DIVIDE(c.wfs_on_yard, NULLIF(v.wfs_velocity_7d, 0)) > 3
+          OR c.wfs_avg_dwell_hours > 24  THEN 'High'
+        WHEN SAFE_DIVIDE(c.wfs_on_yard, NULLIF(v.wfs_velocity_7d, 0)) > 1.5
+          OR c.wfs_avg_dwell_hours > 12  THEN 'Medium'
         ELSE 'Low'
-    END as status
+    END                                                                         AS status
 FROM current_yard c
 LEFT JOIN velocity_data v ON c.FC_NAME = v.FC_NAME
 ORDER BY c.wfs_on_yard DESC
+"""
+
+# IB UPH — 5-week trailing average per FC. Weekly data, cached at 6h TTL.
+FC_UPH_QUERY = """
+SELECT
+    level                              AS fc_name_raw,
+    ROUND(AVG(metric_value), 0)        AS avg_ib_uph,
+    MAX(fyww)                          AS latest_week
+FROM `wmt-wfs-analytics.wfs_ops_analytics.IB_OB_Total_UPH_historical`
+WHERE metric_name  = 'IB_UPH'
+  AND measure_type = 'Actual'
+  AND level        != 'Total'
+  AND fyww >= (
+    SELECT MAX(fyww) - 5
+    FROM `wmt-wfs-analytics.wfs_ops_analytics.IB_OB_Total_UPH_historical`
+    WHERE metric_name = 'IB_UPH'
+  )
+GROUP BY 1
+ORDER BY avg_ib_uph DESC
 """
 
 def _read_cache() -> dict:
@@ -94,54 +154,91 @@ def _read_cache() -> dict:
             return {"time": 0, "data": []}
     return {"time": 0, "data": []}
 
+# Prevent concurrent BQ double-fire on cache miss
+_capacity_lock = threading.Lock()
+
+CAPACITY_TTL = 600   # 10 min — real-time yard data
+
 def is_fc_capacity_cached() -> bool:
-    """Check if we have valid unexpired cache data."""
+    """True if cache file is present and younger than CAPACITY_TTL."""
     cache = _read_cache()
-    return bool(cache["data"] and (time.time() - cache["time"] < 900))
+    return bool(cache["data"] and (time.time() - cache["time"] < CAPACITY_TTL))
 
-def get_fc_capacity() -> list[dict[str, Any]]:
-    """
-    Fetch real-time FC capacity metrics from ETUP_DC_TRAILERS.
-    Returns a list of dictionaries with yard counts, dwell times, and velocity.
-    Caches the result to a file for 15 minutes to survive uvicorn reloads.
-    """
-    current_time = time.time()
-    
-    # Return cached data if younger than 15 minutes (900 seconds)
-    if is_fc_capacity_cached():
-        log.info("Returning FC capacity data from file cache (15 min TTL).")
-        return _read_cache()["data"]
 
+def _build_capacity_row(r: Any) -> dict[str, Any]:
+    """Map a BQ row to a serialisable dict with all new Phase-1 fields."""
+    return {
+        "fc_name":                r["fc_name"],
+        "trailers_on_yard":       r["trailers_on_yard"],
+        "wfs_on_yard":            r["wfs_on_yard"] or 0,
+        "wfs_waiting_to_unload":  r["wfs_waiting_to_unload"] or 0,
+        "wfs_currently_unloading":r["wfs_currently_unloading"] or 0,
+        "waiting_to_unload":      r["waiting_to_unload"] or 0,
+        "currently_unloading":    r["currently_unloading"] or 0,
+        "wfs_waiting_ratio_pct":  r["wfs_waiting_ratio_pct"] or 0,
+        "avg_dwell_hours":        r["avg_dwell_hours"],
+        "wfs_avg_dwell_hours":    r["wfs_avg_dwell_hours"] or 0,
+        "velocity_7d":            r["velocity_7d"],
+        "wfs_velocity_7d":        r["wfs_velocity_7d"] or 0,
+        "velocity_14d":           r["velocity_14d"],
+        "wfs_velocity_14d":       r["wfs_velocity_14d"] or 0,
+        "velocity_30d":           r["velocity_30d"],
+        "wfs_velocity_30d":       r["wfs_velocity_30d"] or 0,
+        "days_to_clear":          r["days_to_clear"],
+        "status":                 r["status"],
+    }
+
+
+def get_fc_capacity_raw() -> list[dict[str, Any]]:
+    """Run FC_CAPACITY_QUERY and return rows. No caching — use capacity_service."""
     client = _get_client()
     log.info("Fetching real-time FC capacity data from BigQuery...")
     job = client.query(FC_CAPACITY_QUERY)
-    rows = list(job.result())
-    
-    capacity_data = []
-    for r in rows:
-        capacity_data.append({
-            "fc_name": r["fc_name"],
-            "trailers_on_yard": r["trailers_on_yard"],
-            "wfs_on_yard": r["wfs_on_yard"] or 0,
-            "avg_dwell_hours": r["avg_dwell_hours"],
-            "wfs_avg_dwell_hours": r["wfs_avg_dwell_hours"] or 0,
-            "velocity_7d": r["velocity_7d"],
-            "wfs_velocity_7d": r["wfs_velocity_7d"] or 0,
-            "velocity_14d": r["velocity_14d"],
-            "wfs_velocity_14d": r["wfs_velocity_14d"] or 0,
-            "velocity_30d": r["velocity_30d"],
-            "wfs_velocity_30d": r["wfs_velocity_30d"] or 0,
-            "status": r["status"]
-        })
-    
-    # Update cache file
-    try:
-        with open(CACHE_FILE, "w") as f:
-            json.dump({"time": current_time, "data": capacity_data}, f)
-    except Exception as e:
-        log.warning(f"Failed to write cache file: {e}")
-        
-    return capacity_data
+    return [_build_capacity_row(r) for r in job.result()]
+
+
+def get_fc_capacity() -> list[dict[str, Any]]:
+    """
+    Fetch FC capacity metrics — file-cached at 10 min TTL.
+    Uses a threading.Lock to prevent concurrent BQ double-fire when the cache
+    is cold and multiple users hit the endpoint simultaneously.
+    """
+    if is_fc_capacity_cached():
+        log.info("FC capacity: serving from cache.")
+        return _read_cache()["data"]
+
+    with _capacity_lock:
+        # Double-check inside lock — another thread may have refreshed already
+        if is_fc_capacity_cached():
+            return _read_cache()["data"]
+
+        capacity_data = get_fc_capacity_raw()
+
+        # Atomic write: write to .tmp then rename — readers never see a partial file
+        tmp = CACHE_FILE + ".tmp"
+        try:
+            with open(tmp, "w") as f:
+                json.dump({"time": time.time(), "data": capacity_data}, f)
+            os.replace(tmp, CACHE_FILE)
+        except Exception as e:
+            log.warning("Failed to write capacity cache: %s", e)
+
+        return capacity_data
+
+
+def get_fc_uph_raw() -> list[dict[str, Any]]:
+    """Run FC_UPH_QUERY and return rows. No caching — called by capacity_service."""
+    client = _get_client()
+    log.info("Fetching IB UPH data from BigQuery...")
+    job = client.query(FC_UPH_QUERY)
+    return [
+        {
+            "fc_name_raw": r["fc_name_raw"],
+            "avg_ib_uph":  int(r["avg_ib_uph"]) if r["avg_ib_uph"] else None,
+            "latest_week": r["latest_week"],
+        }
+        for r in job.result()
+    ]
 
 # Master SQL — Updated 2026-03-25
 # - Fixed cartesian product duplicates (validated vs Seller Center)

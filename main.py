@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 import app.database as db
 from app.routes import escalation, monitor, po_flip
+from app.services.capacity_service import refresh_capacity_cache, refresh_uph_cache
 from app.services.teams_notifier import post_teams_notification
 from config import get_settings
 
@@ -47,11 +48,21 @@ async def monitor_poll_job():
         log.error("[MONITOR] Poll failed: %s", e)
 
 
+def _sync_refresh_capacity():
+    """Thin sync wrapper so APScheduler can call the synchronous refresh."""
+    refresh_capacity_cache()
+
+
+def _sync_refresh_uph():
+    """Thin sync wrapper so APScheduler can call the synchronous UPH refresh."""
+    refresh_uph_cache()
+
+
 @contextlib.asynccontextmanager
 async def lifespan(application: FastAPI):
     await db.init_db()
 
-    # Schedule monitor job at 9am, 1pm, 5pm EST
+    # —— Monitor poll — 9am, 1pm, 5pm EST ——————————————————————————
     for hour in settings.monitor_hours:
         scheduler.add_job(
             monitor_poll_job,
@@ -60,8 +71,36 @@ async def lifespan(application: FastAPI):
             replace_existing=True,
         )
 
+    # —— Proactive FC capacity refresh — every 10 min —————————————————
+    # Keeps cache warm before anyone needs it. Prevents cold-start latency and
+    # eliminates the concurrent BQ double-fire on the first load of the day.
+    scheduler.add_job(
+        _sync_refresh_capacity,
+        "interval",
+        minutes=10,
+        id="fc_capacity_refresh",
+        replace_existing=True,
+    )
+
+    # —— Proactive IB UPH refresh — every 6 hours ——————————————————
+    # UPH is weekly data — 4 queries/day instead of 96. Zero meaningful info lost.
+    scheduler.add_job(
+        _sync_refresh_uph,
+        "interval",
+        hours=6,
+        id="uph_refresh",
+        replace_existing=True,
+    )
+
     scheduler.start()
     log.info("Scheduler started. Monitor hours (EST): %s", settings.monitor_hours)
+
+    # Warm both caches immediately on startup so the first user never waits
+    log.info("Warming FC capacity cache on startup...")
+    _sync_refresh_capacity()
+    log.info("Warming UPH cache on startup...")
+    _sync_refresh_uph()
+
     yield
     scheduler.shutdown()
 

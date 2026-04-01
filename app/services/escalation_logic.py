@@ -58,7 +58,10 @@ def _load_type_label(row: dict) -> str:
     return load or inv or "Unknown"
 
 
-def analyze_escalation(rows: list[dict]) -> EscalationResult:
+def analyze_escalation(
+    rows: list[dict],
+    fc_status: dict | None = None,
+) -> EscalationResult:
     """
     Escalation criteria (per SOP):
       Escalate Hero/Mosaic OOS-risk items for:
@@ -68,6 +71,11 @@ def analyze_escalation(rows: list[dict]) -> EscalationResult:
       Do NOT escalate:
         - ITS already checked in (already being worked)
         - Non-hero/non-mosaic with healthy stock
+
+    fc_status: optional FC congestion row from capacity_service.get_fc_status().
+      When provided and FC is High-congestion with days_to_clear > 3:
+        - BORDERLINE → ESCALATE (congestion makes the delay materially worse)
+      When fc_status is None (cache cold etc.) verdict is unchanged — never errors.
     """
     settings = get_settings()
     threshold = settings.WOS_THRESHOLD
@@ -136,6 +144,17 @@ def analyze_escalation(rows: list[dict]) -> EscalationResult:
     elif borderline:
         reasons.append(f"{len(borderline)} item(s) borderline — AM judgment required.")
         verdict = "BORDERLINE"
+        # FC congestion upgrade: if the FC is severely backed up, borderline becomes escalate
+        if fc_status and fc_status.get("status") == "High":
+            dtc = fc_status.get("days_to_clear") or 0
+            dwell = fc_status.get("wfs_avg_dwell_hours") or 0
+            if dtc > 3 or dwell > 24:
+                verdict = "ESCALATE"
+                reasons.append(
+                    f"⚠️ FC congestion upgrade: {fc_status['fc_name']} is HIGH — "
+                    f"{dtc:.1f} days to clear yard at current velocity "
+                    f"(avg WFS dwell {dwell:.0f}h). Borderline elevated to ESCALATE."
+                )
     else:
         reasons.append("No Hero/Mosaic items at OOS risk. Stock levels appear healthy.")
         verdict = "DO_NOT_ESCALATE"

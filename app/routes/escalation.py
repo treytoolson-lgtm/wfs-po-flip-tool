@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.services.bigquery import query_po_numbers
+from app.services.capacity_service import get_fc_status
 from app.services.escalation_logic import analyze_escalation
 
 log = logging.getLogger(__name__)
@@ -56,8 +57,17 @@ async def escalation_lookup(
 
     results = []
     for po_num, po_rows in by_po.items():
-        analysis = analyze_escalation(po_rows)
-        results.append({"po_num": po_num, "rows": po_rows, "analysis": analysis})
+        # Pull FC status from cache (never blocks the submission — returns None if cold)
+        fc_name = po_rows[0].get("FC_NAME", "") if po_rows else ""
+        fc_status = get_fc_status(fc_name)
+
+        analysis = analyze_escalation(po_rows, fc_status=fc_status)
+        results.append({
+            "po_num":    po_num,
+            "rows":      po_rows,
+            "analysis":  analysis,
+            "fc_status": fc_status,
+        })
 
     return templates.TemplateResponse(
         "partials/escalation_results.html",

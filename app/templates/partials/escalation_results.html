@@ -15,6 +15,62 @@
         </div>
     </div>
 
+    <!-- FC Congestion Context -->
+    {% set fc = result.fc_status %}
+    {% if fc %}
+        <div class="mb-6 rounded-lg border
+            {% if fc.status == 'High' %}border-red-300 bg-red-50
+            {% elif fc.status == 'Medium' %}border-yellow-300 bg-yellow-50
+            {% else %}border-green-200 bg-green-50{% endif %}
+            p-4">
+            <div class="flex items-center gap-2 mb-2">
+                <span class="font-bold text-sm uppercase tracking-wide
+                    {% if fc.status == 'High' %}text-red-700
+                    {% elif fc.status == 'Medium' %}text-yellow-700
+                    {% else %}text-green-700{% endif %}">
+                    {% if fc.status == 'High' %}🔴{% elif fc.status == 'Medium' %}🟡{% else %}🟢{% endif %}
+                    {{ fc.fc_name }} FC — {{ fc.status }} Congestion
+                </span>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                <div>
+                    <div class="text-gray-500 text-xs">Days to Clear Yard</div>
+                    <div class="font-bold
+                        {% if fc.days_to_clear and fc.days_to_clear > 3 %}text-red-700
+                        {% elif fc.days_to_clear and fc.days_to_clear > 1.5 %}text-yellow-700
+                        {% else %}text-green-700{% endif %}">
+                        {% if fc.days_to_clear is not none %}{{ fc.days_to_clear }}d{% else %}&mdash;{% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-gray-500 text-xs">WFS Trailers on Yard</div>
+                    <div class="font-bold text-gray-800">{{ fc.wfs_on_yard }}</div>
+                </div>
+                <div>
+                    <div class="text-gray-500 text-xs">Waiting / Working</div>
+                    <div class="font-bold">
+                        <span class="text-yellow-700">{{ fc.wfs_waiting_to_unload }}</span>
+                        <span class="text-gray-400">/</span>
+                        <span class="text-green-700">{{ fc.wfs_currently_unloading }}</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-gray-500 text-xs">Avg WFS Dwell</div>
+                    <div class="font-bold
+                        {% if fc.wfs_avg_dwell_hours and fc.wfs_avg_dwell_hours > 24 %}text-red-700
+                        {% elif fc.wfs_avg_dwell_hours and fc.wfs_avg_dwell_hours > 12 %}text-yellow-700
+                        {% else %}text-gray-800{% endif %}">
+                        {% if fc.wfs_avg_dwell_hours %}{{ fc.wfs_avg_dwell_hours }}h{% else %}&mdash;{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-500">
+            FC congestion data temporarily unavailable (refreshes every 10 min)
+        </div>
+    {% endif %}
+
     <!-- Verdict -->
     {% set analysis = result.analysis %}
     {% if analysis.verdict == "ESCALATE" %}
