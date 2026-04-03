@@ -16,23 +16,20 @@ log = logging.getLogger(__name__)
 
 
 FC_CAPACITY_QUERY = """
-WITH wfs_deliveries AS (
-    SELECT DISTINCT DELIVERY_NUMBER
-    FROM `wmt-wfs-analytics.WW_WFS_PROD_TABLES.WFS_IB_FC_DELIVERY_DETAILS`
-),
-trailer_base AS (
+WITH trailer_base AS (
     SELECT
-        t.FC_NAME,
-        t.TRAILER_ID,
-        t.ARRIVAL_TS_LCL,
-        t.GATE_OUT_TS_LCL,
-        t.DELIVERY_STATUS,
-        CASE WHEN w.DELIVERY_NUMBER IS NOT NULL THEN 1 ELSE 0 END AS is_wfs
-    FROM `wmt-cp-prod.e2e_fmt_cp.ETUP_DC_TRAILERS` t
-    LEFT JOIN wfs_deliveries w ON t.DELIVERY_NUMBER = w.DELIVERY_NUMBER
-    WHERE t.FC_NAME IS NOT NULL
-      AND (t.GATE_OUT_TS_LCL IS NULL
-           OR t.GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY))
+        FC_NAME,
+        TRAILER_ID,
+        ARRIVAL_TS_LCL,
+        GATE_OUT_TS_LCL,
+        DELIVERY_STATUS,
+        -- Use native TRAILER_PO_SLR column — same definition analytics team uses,
+        -- no cross-dataset join needed. Replaces the old WFS_IB_FC_DELIVERY_DETAILS join.
+        CASE WHEN TRAILER_PO_SLR = 'WFS' THEN 1 ELSE 0 END AS is_wfs
+    FROM `wmt-cp-prod.e2e_fmt_cp.ETUP_DC_TRAILERS`
+    WHERE FC_NAME IS NOT NULL
+      AND (GATE_OUT_TS_LCL IS NULL
+           OR GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY))
 ),
 current_yard AS (
     SELECT
