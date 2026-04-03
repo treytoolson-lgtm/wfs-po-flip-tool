@@ -61,7 +61,7 @@ current_yard AS (
     FROM trailer_base
     WHERE GATE_OUT_TS_LCL IS NULL
       AND ARRIVAL_TS_LCL IS NOT NULL
-      AND ARRIVAL_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 60 DAY)  -- exclude phantom records (ghost trailers with no gate-out from prior periods)
+      AND ARRIVAL_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 14 DAY)  -- 14-day window matches analytics source of truth; aligns with 336hr dwell cap
     GROUP BY FC_NAME
 ),
 velocity_data AS (
