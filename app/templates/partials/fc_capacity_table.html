@@ -28,10 +28,6 @@
                     <div class="text-gray-500 font-normal normal-case"><span class="text-blue-600">WFS</span> / Total</div>
                 </th>
                 <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    14D / 30D Velocity
-                    <div class="text-gray-500 font-normal normal-case">WFS tr/day</div>
-                </th>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                     IB UPH
                     <span class="ml-1 text-gray-400 font-normal normal-case" title="Inbound Units Per Hour — how fast this FC processes inbound freight. Higher = faster unload = trailers clear quicker. Only Transfer FCs (IND2T, NJ3T, LAX2T) have data in this table currently.">ⓘ</span>
                     <div class="text-gray-500 font-normal normal-case">units/hr</div>
@@ -100,11 +96,6 @@
                     <span class="text-blue-600">{{ row.wfs_velocity_7d }}</span>
                     <span class="text-gray-400 mx-1">/</span>
                     <span class="text-gray-600">{{ row.velocity_7d }}</span>
-                </td>
-
-                {# 14D / 30D WFS velocity #}
-                <td class="px-4 py-3 whitespace-nowrap text-gray-600">
-                    {{ row.wfs_velocity_14d }} / {{ row.wfs_velocity_30d }}
                 </td>
 
                 {# IB UPH — sourced from uph_cache, merged in via _get_capacity_with_uph() #}

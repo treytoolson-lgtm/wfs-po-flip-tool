@@ -72,16 +72,6 @@ velocity_data AS (
         ROUND(COUNT(DISTINCT CASE WHEN is_wfs = 1
             AND GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 7 DAY)
             THEN TRAILER_ID END) / 7.0, 1)                                     AS wfs_velocity_7d,
-        ROUND(COUNT(DISTINCT CASE WHEN GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 14 DAY)
-            THEN TRAILER_ID END) / 14.0, 1)                                    AS velocity_14d,
-        ROUND(COUNT(DISTINCT CASE WHEN is_wfs = 1
-            AND GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 14 DAY)
-            THEN TRAILER_ID END) / 14.0, 1)                                    AS wfs_velocity_14d,
-        ROUND(COUNT(DISTINCT CASE WHEN GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY)
-            THEN TRAILER_ID END) / 30.0, 1)                                    AS velocity_30d,
-        ROUND(COUNT(DISTINCT CASE WHEN is_wfs = 1
-            AND GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY)
-            THEN TRAILER_ID END) / 30.0, 1)                                    AS wfs_velocity_30d
     FROM trailer_base
     WHERE GATE_OUT_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY)
     GROUP BY FC_NAME
@@ -101,10 +91,6 @@ SELECT
     c.wfs_avg_dwell_hours,
     v.velocity_7d,
     v.wfs_velocity_7d,
-    v.velocity_14d,
-    v.wfs_velocity_14d,
-    v.velocity_30d,
-    v.wfs_velocity_30d,
     -- PRIMARY congestion metric: days at current velocity to clear what's on yard
     ROUND(SAFE_DIVIDE(c.wfs_on_yard, NULLIF(v.wfs_velocity_7d, 0)), 1)         AS days_to_clear,
     -- Smarter status: velocity-relative + dwell-based (not flat trailer count)
@@ -154,10 +140,6 @@ def _build_capacity_row(r: Any) -> dict[str, Any]:
         "wfs_avg_dwell_hours":    r["wfs_avg_dwell_hours"] or 0,
         "velocity_7d":            r["velocity_7d"],
         "wfs_velocity_7d":        r["wfs_velocity_7d"] or 0,
-        "velocity_14d":           r["velocity_14d"],
-        "wfs_velocity_14d":       r["wfs_velocity_14d"] or 0,
-        "velocity_30d":           r["velocity_30d"],
-        "wfs_velocity_30d":       r["wfs_velocity_30d"] or 0,
         "days_to_clear":          r["days_to_clear"],
         "status":                 r["status"],
     }
