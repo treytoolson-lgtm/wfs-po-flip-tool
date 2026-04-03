@@ -64,6 +64,7 @@ current_yard AS (
     FROM trailer_base
     WHERE GATE_OUT_TS_LCL IS NULL
       AND ARRIVAL_TS_LCL IS NOT NULL
+      AND ARRIVAL_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 60 DAY)  -- exclude phantom records (ghost trailers with no gate-out from prior periods)
     GROUP BY FC_NAME
 ),
 velocity_data AS (
