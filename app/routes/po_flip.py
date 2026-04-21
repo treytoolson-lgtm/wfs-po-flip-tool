@@ -21,6 +21,10 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
+WFS_TRAILERS_PER_DAY_LOW = 10.0
+WFS_TRAILERS_PER_DAY_HIGH = 15.0
+WFS_TRAILERS_PER_DAY_PLANNING = (WFS_TRAILERS_PER_DAY_LOW + WFS_TRAILERS_PER_DAY_HIGH) / 2
+
 
 def _get_capacity_with_uph() -> list[dict]:
     """Return capacity rows with avg_ib_uph merged in.
@@ -39,19 +43,37 @@ def _get_capacity_with_uph() -> list[dict]:
     return capacity_data
 
 
-def _get_simple_capacity_rows() -> list[dict[str, int | str]]:
-    """Return one clean row per FC for the FC Capacity page.
+def _format_days(days: float) -> str:
+    """Return a compact 1-decimal day string for UI display."""
+    return f"{days:.1f}d"
 
-    No pseudo-science. Just the FC and the current WFS trailer count so the
-    page matches the actual ops question people are trying to answer.
+
+
+def _get_simple_capacity_rows() -> list[dict[str, float | int | str]]:
+    """Return simplified FC rows with throughput-based days-to-clear estimates.
+
+    We show both a range and a planning midpoint because a throughput range is
+    more honest than a fake-precise single number.
     """
-    rows = [
-        {
-            "fc_name": row.get("fc_name") or "Unknown",
-            "wfs_trailers": int(row.get("wfs_on_yard") or 0),
-        }
-        for row in get_all_fc_statuses()
-    ]
+    rows = []
+    for row in get_all_fc_statuses():
+        wfs_trailers = int(row.get("wfs_on_yard") or 0)
+        days_to_clear_low = wfs_trailers / WFS_TRAILERS_PER_DAY_HIGH
+        days_to_clear_high = wfs_trailers / WFS_TRAILERS_PER_DAY_LOW
+        days_to_clear_planning = wfs_trailers / WFS_TRAILERS_PER_DAY_PLANNING
+        rows.append(
+            {
+                "fc_name": row.get("fc_name") or "Unknown",
+                "wfs_trailers": wfs_trailers,
+                "days_to_clear_low": days_to_clear_low,
+                "days_to_clear_high": days_to_clear_high,
+                "days_to_clear_planning": days_to_clear_planning,
+                "days_to_clear_range_label": (
+                    f"{_format_days(days_to_clear_low)}–{_format_days(days_to_clear_high)}"
+                ),
+                "days_to_clear_planning_label": _format_days(days_to_clear_planning),
+            }
+        )
     return sorted(rows, key=lambda row: (-row["wfs_trailers"], row["fc_name"]))
 
 # All 31 WFS FCs from the build spec
@@ -84,6 +106,9 @@ async def fc_capacity_page(request: Request):
                 "request": request,
                 "capacity_data": capacity_rows,
                 "total_wfs_trailers": sum(row["wfs_trailers"] for row in capacity_rows),
+                "planning_throughput": WFS_TRAILERS_PER_DAY_PLANNING,
+                "throughput_low": WFS_TRAILERS_PER_DAY_LOW,
+                "throughput_high": WFS_TRAILERS_PER_DAY_HIGH,
             },
         )
     # Cache cold — render shell; HTMX loads data once cache warms

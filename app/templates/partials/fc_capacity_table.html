@@ -3,7 +3,8 @@
         <div>
             <h2 class="text-lg font-bold text-gray-900">Current WFS trailers by FC</h2>
             <p class="mt-1 text-sm text-gray-600">
-                Sorted from busiest to quietest. Rule of thumb: roughly 15 trailers per FC per day.
+                Days to clear is shown as a range using {{ throughput_low | int }}–{{ throughput_high | int }} trailers/day,
+                with a planning estimate at {{ planning_throughput }} per day.
             </p>
         </div>
         <div class="rounded-lg border border-gray-200 bg-white px-4 py-3 text-right shadow-sm">
@@ -19,6 +20,10 @@
             <tr>
                 <th scope="col" class="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-700">FC</th>
                 <th scope="col" class="px-6 py-3 text-right text-xs font-bold uppercase tracking-wider text-gray-700">WFS Trailers</th>
+                <th scope="col" class="px-6 py-3 text-right text-xs font-bold uppercase tracking-wider text-gray-700">
+                    Days to Clear
+                    <div class="text-gray-500 font-normal normal-case">{{ throughput_low | int }}–{{ throughput_high | int }}/day</div>
+                </th>
             </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
@@ -27,6 +32,10 @@
                 <td class="px-6 py-4 whitespace-nowrap font-semibold text-gray-900">{{ row.fc_name }}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-right font-bold {% if row.wfs_trailers >= 15 %}text-walmart-blue{% else %}text-gray-700{% endif %}">
                     {{ row.wfs_trailers }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-right">
+                    <div class="font-bold text-gray-900">{{ row.days_to_clear_range_label }}</div>
+                    <div class="text-xs text-gray-500">Plan: {{ row.days_to_clear_planning_label }} @ {{ planning_throughput }}/day</div>
                 </td>
             </tr>
             {% endfor %}
