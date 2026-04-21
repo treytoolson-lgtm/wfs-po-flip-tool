@@ -26,11 +26,59 @@ WFS_TRAILERS_PER_DAY_HIGH = 15.0
 WFS_TRAILERS_PER_DAY_PLANNING = (WFS_TRAILERS_PER_DAY_LOW + WFS_TRAILERS_PER_DAY_HIGH) / 2
 
 
-def _get_capacity_with_uph() -> list[dict]:
-    """Return capacity rows with avg_ib_uph merged in.
+def _format_days(days: float) -> str:
+    """Return a compact 1-decimal day string for UI display."""
+    return f"{days:.1f}d"
 
-    PO Flip still uses the richer capacity payload for quick congestion context.
-    The dedicated FC Capacity page is intentionally much simpler now.
+
+
+def _planning_status(days_to_clear_planning: float) -> str:
+    """Bucket planning clear time into a simple low/medium/high signal."""
+    if days_to_clear_planning > 3:
+        return "High"
+    if days_to_clear_planning > 1.5:
+        return "Medium"
+    return "Low"
+
+
+
+def _planning_status_icon(planning_status: str) -> str:
+    """Emoji signal for planning-based FC load."""
+    return {
+        "High": "🔴",
+        "Medium": "🟡",
+        "Low": "🟢",
+    }.get(planning_status, "⚪")
+
+
+
+def _build_planning_capacity_fields(row: dict) -> dict[str, float | int | str]:
+    """Add planning-friendly FC fields derived from aligned WFS trailer counts."""
+    wfs_trailers = int(row.get("wfs_on_yard") or 0)
+    days_to_clear_low = wfs_trailers / WFS_TRAILERS_PER_DAY_HIGH
+    days_to_clear_high = wfs_trailers / WFS_TRAILERS_PER_DAY_LOW
+    days_to_clear_planning = wfs_trailers / WFS_TRAILERS_PER_DAY_PLANNING
+    planning_status = _planning_status(days_to_clear_planning)
+    return {
+        "wfs_trailers": wfs_trailers,
+        "days_to_clear_low": days_to_clear_low,
+        "days_to_clear_high": days_to_clear_high,
+        "days_to_clear_planning": days_to_clear_planning,
+        "days_to_clear_range_label": (
+            f"{_format_days(days_to_clear_low)}–{_format_days(days_to_clear_high)}"
+        ),
+        "days_to_clear_planning_label": _format_days(days_to_clear_planning),
+        "planning_status": planning_status,
+        "planning_status_icon": _planning_status_icon(planning_status),
+    }
+
+
+
+def _get_capacity_with_uph() -> list[dict]:
+    """Return capacity rows with UPH and planning fields merged in.
+
+    PO Flip uses the richer row shape, but we still enrich it with the new
+    planning-based days-to-clear fields so the UI does not rely on dwell.
     """
     capacity_data = get_all_fc_statuses()
     uph_lookup = {
@@ -40,12 +88,8 @@ def _get_capacity_with_uph() -> list[dict]:
     for row in capacity_data:
         fc_lower = (row.get("fc_name") or "").lower()
         row["avg_ib_uph"] = (uph_lookup.get(fc_lower) or {}).get("avg_ib_uph")
+        row.update(_build_planning_capacity_fields(row))
     return capacity_data
-
-
-def _format_days(days: float) -> str:
-    """Return a compact 1-decimal day string for UI display."""
-    return f"{days:.1f}d"
 
 
 
@@ -57,21 +101,10 @@ def _get_simple_capacity_rows() -> list[dict[str, float | int | str]]:
     """
     rows = []
     for row in get_all_fc_statuses():
-        wfs_trailers = int(row.get("wfs_on_yard") or 0)
-        days_to_clear_low = wfs_trailers / WFS_TRAILERS_PER_DAY_HIGH
-        days_to_clear_high = wfs_trailers / WFS_TRAILERS_PER_DAY_LOW
-        days_to_clear_planning = wfs_trailers / WFS_TRAILERS_PER_DAY_PLANNING
         rows.append(
             {
                 "fc_name": row.get("fc_name") or "Unknown",
-                "wfs_trailers": wfs_trailers,
-                "days_to_clear_low": days_to_clear_low,
-                "days_to_clear_high": days_to_clear_high,
-                "days_to_clear_planning": days_to_clear_planning,
-                "days_to_clear_range_label": (
-                    f"{_format_days(days_to_clear_low)}–{_format_days(days_to_clear_high)}"
-                ),
-                "days_to_clear_planning_label": _format_days(days_to_clear_planning),
+                **_build_planning_capacity_fields(row),
             }
         )
     return sorted(rows, key=lambda row: (-row["wfs_trailers"], row["fc_name"]))
@@ -125,6 +158,9 @@ async def fc_capacity_data(request: Request):
             "request": request,
             "capacity_data": capacity_rows,
             "total_wfs_trailers": sum(row["wfs_trailers"] for row in capacity_rows),
+            "planning_throughput": WFS_TRAILERS_PER_DAY_PLANNING,
+            "throughput_low": WFS_TRAILERS_PER_DAY_LOW,
+            "throughput_high": WFS_TRAILERS_PER_DAY_HIGH,
         },
     )
 
@@ -183,7 +219,7 @@ async def po_flip_lookup(
     
     # Case-insensitive lookup: BQ returns mixed-case FC names (e.g. "IND2t")
     # but WFS_FCS uses canonical casing (e.g. "IND2T"). Lower both sides.
-    capacity_data = get_all_fc_statuses()
+    capacity_data = _get_capacity_with_uph()
     capacity_lookup = {item["fc_name"].lower(): item for item in capacity_data}
     return templates.TemplateResponse(
         "partials/po_flip_form.html", 
@@ -193,6 +229,7 @@ async def po_flip_lookup(
             "warning": warning_html,
             "wfs_fcs": WFS_FCS,
             "capacity_lookup": capacity_lookup,
+            "planning_throughput": WFS_TRAILERS_PER_DAY_PLANNING,
         }
     )
 

@@ -37,18 +37,16 @@
             {% set src_cap = capacity_lookup.get(po.current_fc|lower, {}) %}
             {% if src_cap %}
             <div class="mb-4 rounded-lg border p-3 text-sm flex items-center gap-3
-                {% if src_cap.status == 'High' %}border-red-300 bg-red-50 text-red-800
-                {% elif src_cap.status == 'Medium' %}border-yellow-300 bg-yellow-50 text-yellow-800
+                {% if src_cap.planning_status == 'High' %}border-red-300 bg-red-50 text-red-800
+                {% elif src_cap.planning_status == 'Medium' %}border-yellow-300 bg-yellow-50 text-yellow-800
                 {% else %}border-green-200 bg-green-50 text-green-800{% endif %}">
                 <span class="font-bold">
-                    {% if src_cap.status == 'High' %}🔴 Source FC {{ po.current_fc }} — HIGH congestion
-                    {% elif src_cap.status == 'Medium' %}🟡 Source FC {{ po.current_fc }} — MEDIUM congestion
-                    {% else %}🟢 Source FC {{ po.current_fc }} — Low congestion{% endif %}
+                    {{ src_cap.planning_status_icon }} Source FC {{ po.current_fc }} — {{ src_cap.planning_status }} planned clear time
                 </span>
                 <span class="text-xs opacity-75">
-                    {% if src_cap.days_to_clear is not none %}{{ src_cap.days_to_clear }}d to clear &bull; {% endif %}
-                    {{ src_cap.wfs_on_yard }} WFS on yard &bull;
-                    {{ src_cap.wfs_avg_dwell_hours }}h avg dwell
+                    {{ src_cap.wfs_trailers }} WFS on yard &bull;
+                    {{ src_cap.days_to_clear_range_label }} to clear &bull;
+                    Plan: {{ src_cap.days_to_clear_planning_label }} @ {{ planning_throughput }}/day
                 </span>
             </div>
             {% endif %}
@@ -121,7 +119,7 @@
                                 {% set cap = capacity_lookup.get(fc|lower, {}) %}
                                 {% if cap %}
                                     <option value="{{ fc }}">
-                                        {{ fc }} {% if cap.status == 'High' %}🔴{% elif cap.status == 'Medium' %}🟡{% else %}🟢{% endif %} ({{ cap.wfs_on_yard }} WFS, {{ cap.wfs_avg_dwell_hours }}h dwell)
+                                        {{ fc }} {{ cap.planning_status_icon }} ({{ cap.wfs_trailers }} WFS, {{ cap.days_to_clear_range_label }} clear)
                                     </option>
                                 {% else %}
                                     <option value="{{ fc }}">{{ fc }} ⚪ (No yard data)</option>
@@ -196,6 +194,7 @@
 const poData = {{ pos | tojson }};
 const wfsFcs = {{ wfs_fcs | tojson }};
 const capacityLookup = {{ capacity_lookup | tojson }};
+const planningThroughput = {{ planning_throughput | tojson }};
 
 // Show/hide target FC congestion warning when the dropdown changes
 function onTargetFcChange(poNum) {
@@ -203,27 +202,30 @@ function onTargetFcChange(poNum) {
     const warningDiv = document.getElementById(`fc-warning-${poNum}`);
     const cap = capacityLookup[fc.toLowerCase()] || {};
 
-    if (!fc || !cap.status) {
+    if (!fc || !cap.planning_status) {
         warningDiv.classList.add('hidden');
         warningDiv.textContent = '';
         return;
     }
 
-    const dtc  = cap.days_to_clear != null ? `${cap.days_to_clear}d to clear` : '';
-    const dwell = cap.wfs_avg_dwell_hours ? `${cap.wfs_avg_dwell_hours}h avg dwell` : '';
-    const detail = [dtc, dwell].filter(Boolean).join(' · ');
+    const detail = [
+        `${cap.wfs_trailers} WFS on yard`,
+        `${cap.days_to_clear_range_label} to clear`,
+        `Plan: ${cap.days_to_clear_planning_label} @ ${planningThroughput}/day`
+    ].join(' · ');
 
-    if (cap.status === 'High') {
+    if (cap.planning_status === 'High') {
         warningDiv.className = 'mt-2 rounded border border-red-300 bg-red-50 text-red-800 p-2 text-sm font-medium';
-        warningDiv.innerHTML = `🔴 <strong>${fc}</strong> is HIGH congestion — ${detail}. Consider a lower-congestion FC.`;
+        warningDiv.innerHTML = `🔴 <strong>${fc}</strong> has a HIGH planned clear time — ${detail}. Consider a lighter FC if possible.`;
         warningDiv.classList.remove('hidden');
-    } else if (cap.status === 'Medium') {
+    } else if (cap.planning_status === 'Medium') {
         warningDiv.className = 'mt-2 rounded border border-yellow-300 bg-yellow-50 text-yellow-800 p-2 text-sm font-medium';
-        warningDiv.innerHTML = `🟡 <strong>${fc}</strong> is MEDIUM congestion — ${detail}. Monitor closely.`;
+        warningDiv.innerHTML = `🟡 <strong>${fc}</strong> has a MEDIUM planned clear time — ${detail}. Monitor closely.`;
         warningDiv.classList.remove('hidden');
     } else {
-        warningDiv.classList.add('hidden');
-        warningDiv.textContent = '';
+        warningDiv.className = 'mt-2 rounded border border-green-200 bg-green-50 text-green-800 p-2 text-sm font-medium';
+        warningDiv.innerHTML = `🟢 <strong>${fc}</strong> looks lighter right now — ${detail}.`;
+        warningDiv.classList.remove('hidden');
     }
 }
 
