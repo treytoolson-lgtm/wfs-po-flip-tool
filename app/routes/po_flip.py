@@ -25,9 +25,8 @@ templates = Jinja2Templates(directory="app/templates")
 def _get_capacity_with_uph() -> list[dict]:
     """Return capacity rows with avg_ib_uph merged in.
 
-    Both the SSR path (fc_capacity_page) and the HTMX data endpoint
-    (fc_capacity_data) must go through here so the template always gets
-    a row with avg_ib_uph — missing key = Jinja2 Undefined ≠ None crash.
+    PO Flip still uses the richer capacity payload for quick congestion context.
+    The dedicated FC Capacity page is intentionally much simpler now.
     """
     capacity_data = get_all_fc_statuses()
     uph_lookup = {
@@ -38,6 +37,22 @@ def _get_capacity_with_uph() -> list[dict]:
         fc_lower = (row.get("fc_name") or "").lower()
         row["avg_ib_uph"] = (uph_lookup.get(fc_lower) or {}).get("avg_ib_uph")
     return capacity_data
+
+
+def _get_simple_capacity_rows() -> list[dict[str, int | str]]:
+    """Return one clean row per FC for the FC Capacity page.
+
+    No pseudo-science. Just the FC and the current WFS trailer count so the
+    page matches the actual ops question people are trying to answer.
+    """
+    rows = [
+        {
+            "fc_name": row.get("fc_name") or "Unknown",
+            "wfs_trailers": int(row.get("wfs_on_yard") or 0),
+        }
+        for row in get_all_fc_statuses()
+    ]
+    return sorted(rows, key=lambda row: (-row["wfs_trailers"], row["fc_name"]))
 
 # All 31 WFS FCs from the build spec
 # FC names must match exactly what BigQuery returns in fc_name (case-insensitive
@@ -62,8 +77,14 @@ async def po_flip_page(request: Request):
 @router.get("/fc-capacity", response_class=HTMLResponse)
 async def fc_capacity_page(request: Request):
     if is_capacity_cached():
+        capacity_rows = _get_simple_capacity_rows()
         return templates.TemplateResponse(
-            "fc_capacity.html", {"request": request, "capacity_data": _get_capacity_with_uph()}
+            "fc_capacity.html",
+            {
+                "request": request,
+                "capacity_data": capacity_rows,
+                "total_wfs_trailers": sum(row["wfs_trailers"] for row in capacity_rows),
+            },
         )
     # Cache cold — render shell; HTMX loads data once cache warms
     return templates.TemplateResponse(
@@ -72,9 +93,14 @@ async def fc_capacity_page(request: Request):
 
 @router.get("/fc-capacity/data", response_class=HTMLResponse)
 async def fc_capacity_data(request: Request):
+    capacity_rows = _get_simple_capacity_rows()
     return templates.TemplateResponse(
         "partials/fc_capacity_table.html",
-        {"request": request, "capacity_data": _get_capacity_with_uph()},
+        {
+            "request": request,
+            "capacity_data": capacity_rows,
+            "total_wfs_trailers": sum(row["wfs_trailers"] for row in capacity_rows),
+        },
     )
 
 

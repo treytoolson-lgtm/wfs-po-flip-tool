@@ -1,112 +1,33 @@
+<div class="border-b border-gray-200 bg-gray-50 px-6 py-4">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+            <h2 class="text-lg font-bold text-gray-900">Current WFS trailers by FC</h2>
+            <p class="mt-1 text-sm text-gray-600">
+                Sorted from busiest to quietest. Rule of thumb: roughly 15 trailers per FC per day.
+            </p>
+        </div>
+        <div class="rounded-lg border border-gray-200 bg-white px-4 py-3 text-right shadow-sm">
+            <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Total WFS trailers on yard</div>
+            <div class="text-2xl font-extrabold text-walmart-blue">{{ total_wfs_trailers }}</div>
+        </div>
+    </div>
+</div>
+
 <div class="overflow-x-auto">
     <table class="min-w-full divide-y divide-gray-200 text-sm">
         <thead class="bg-gray-50 sticky top-0 z-10 shadow-sm">
             <tr>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">FC</th>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Status
-                    <span class="ml-1 text-gray-400 font-normal normal-case" title="High: days-to-clear &gt;3 OR avg WFS dwell &gt;24h. Medium: DTC &gt;1.5 OR dwell &gt;12h. Low: otherwise.">ⓘ</span>
-                </th>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Days to Clear
-                    <span class="ml-1 text-gray-400 font-normal normal-case" title="WFS trailers on yard ÷ 7-day WFS velocity. Primary congestion signal.">ⓘ</span>
-                </th>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    WFS Trailers
-                    <div class="text-gray-500 font-normal normal-case">Waiting / Unloading / Total</div>
-                </th>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Waiting %
-                    <span class="ml-1 text-gray-400 font-normal normal-case" title="% of WFS yard in ARV status (waiting, not yet docked).">ⓘ</span>
-                </th>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Avg Dwell (hrs)
-                    <div class="text-gray-500 font-normal normal-case"><span class="text-blue-600">WFS</span> / Total</div>
-                </th>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    7D Velocity
-                    <div class="text-gray-500 font-normal normal-case"><span class="text-blue-600">WFS</span> / Total</div>
-                </th>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    IB UPH
-                    <span class="ml-1 text-gray-400 font-normal normal-case" title="Inbound Units Per Hour — how fast this FC processes inbound freight. Higher = faster unload = trailers clear quicker. Only Transfer FCs (IND2T, NJ3T, LAX2T) have data in this table currently.">ⓘ</span>
-                    <div class="text-gray-500 font-normal normal-case">units/hr</div>
-                </th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-700">FC</th>
+                <th scope="col" class="px-6 py-3 text-right text-xs font-bold uppercase tracking-wider text-gray-700">WFS Trailers</th>
             </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
             {% for row in capacity_data %}
-            {%  set dtc = row.days_to_clear %}
             <tr class="hover:bg-gray-50">
-
-                {# FC Name #}
-                <td class="px-4 py-3 whitespace-nowrap font-semibold text-gray-900">{{ row.fc_name }}</td>
-
-                {# Status badge — updated logic labels #}
-                <td class="px-4 py-3 whitespace-nowrap">
-                    {% if row.status == 'High' %}
-                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                            🔴 High
-                        </span>
-                    {% elif row.status == 'Medium' %}
-                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                            🟡 Medium
-                        </span>
-                    {% else %}
-                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                            🟢 Low
-                        </span>
-                    {% endif %}
+                <td class="px-6 py-4 whitespace-nowrap font-semibold text-gray-900">{{ row.fc_name }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-right font-bold {% if row.wfs_trailers >= 15 %}text-walmart-blue{% else %}text-gray-700{% endif %}">
+                    {{ row.wfs_trailers }}
                 </td>
-
-                {# Days to Clear — colour-coded by urgency #}
-                <td class="px-4 py-3 whitespace-nowrap font-bold
-                    {% if dtc and dtc > 3 %}text-red-700
-                    {% elif dtc and dtc > 1.5 %}text-yellow-700
-                    {% else %}text-green-700{% endif %}">
-                    {% if dtc is not none %}{{ dtc }}d{% else %}&mdash;{% endif %}
-                </td>
-
-                {# WFS trailer split: Waiting / Unloading / Total #}
-                <td class="px-4 py-3 whitespace-nowrap">
-                    <span class="text-yellow-700 font-semibold" title="Waiting to unload (ARV)">{{ row.wfs_waiting_to_unload }}</span>
-                    <span class="text-gray-400 mx-1">/</span>
-                    <span class="text-green-700 font-semibold" title="Currently unloading (WRK)">{{ row.wfs_currently_unloading }}</span>
-                    <span class="text-gray-400 mx-1">/</span>
-                    <span class="text-blue-600 font-semibold" title="Total WFS on yard">{{ row.wfs_on_yard }}</span>
-                </td>
-
-                {# Waiting ratio % #}
-                <td class="px-4 py-3 whitespace-nowrap
-                    {% if row.wfs_waiting_ratio_pct and row.wfs_waiting_ratio_pct > 70 %}text-red-700 font-bold
-                    {% elif row.wfs_waiting_ratio_pct and row.wfs_waiting_ratio_pct > 50 %}text-yellow-700
-                    {% else %}text-gray-600{% endif %}">
-                    {% if row.wfs_waiting_ratio_pct is not none %}{{ row.wfs_waiting_ratio_pct }}%{% else %}&mdash;{% endif %}
-                </td>
-
-                {# Dwell hours WFS / Total #}
-                <td class="px-4 py-3 whitespace-nowrap">
-                    <span class="text-blue-600">{{ row.wfs_avg_dwell_hours }}</span>
-                    <span class="text-gray-400 mx-1">/</span>
-                    <span class="text-gray-600">{{ row.avg_dwell_hours }}</span>
-                </td>
-
-                {# 7D Velocity WFS / Total #}
-                <td class="px-4 py-3 whitespace-nowrap">
-                    <span class="text-blue-600">{{ row.wfs_velocity_7d }}</span>
-                    <span class="text-gray-400 mx-1">/</span>
-                    <span class="text-gray-600">{{ row.velocity_7d }}</span>
-                </td>
-
-                {# IB UPH — sourced from uph_cache, merged in via _get_capacity_with_uph() #}
-                <td class="px-4 py-3 whitespace-nowrap font-semibold
-                    {% if row.avg_ib_uph and row.avg_ib_uph >= 80 %}text-green-700
-                    {% elif row.avg_ib_uph and row.avg_ib_uph >= 50 %}text-yellow-700
-                    {% elif row.avg_ib_uph %}text-red-700
-                    {% else %}text-gray-400{% endif %}">
-                    {% if row.avg_ib_uph %}{{ row.avg_ib_uph | int }}{% else %}&mdash;{% endif %}
-                </td>
-
             </tr>
             {% endfor %}
         </tbody>
