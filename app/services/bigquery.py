@@ -22,6 +22,7 @@ WITH trailer_base AS (
         TRAILER_ID,
         ARRIVAL_TS_LCL,
         GATE_OUT_TS_LCL,
+        ETUP_COMPLETED_ENTITY_OPERATION_TS_LCL,
         DELIVERY_STATUS,
         -- Use native TRAILER_PO_SLR column — same definition analytics team uses,
         -- no cross-dataset join needed. Replaces the old WFS_IB_FC_DELIVERY_DETAILS join.
@@ -48,7 +49,7 @@ current_yard AS (
             THEN TRAILER_ID END)                                                AS waiting_to_unload,
         COUNT(DISTINCT CASE WHEN UPPER(DELIVERY_STATUS) IN ('WRK','WORKING')
             THEN TRAILER_ID END)                                                AS currently_unloading,
-        -- Dwell: cap at 336 hrs (14 days) to filter phantom/stranded trailers
+        -- Dwell: cap at 336 hrs (14 days) so stale outliers do not distort the average
         ROUND(AVG(
             CASE WHEN DATETIME_DIFF(CURRENT_DATETIME(), ARRIVAL_TS_LCL, HOUR) <= 336
             THEN DATETIME_DIFF(CURRENT_DATETIME(), ARRIVAL_TS_LCL, HOUR) END
@@ -61,7 +62,7 @@ current_yard AS (
     FROM trailer_base
     WHERE GATE_OUT_TS_LCL IS NULL
       AND ARRIVAL_TS_LCL IS NOT NULL
-      AND ARRIVAL_TS_LCL >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 14 DAY)  -- 14-day window matches analytics source of truth; aligns with 336hr dwell cap
+      AND ETUP_COMPLETED_ENTITY_OPERATION_TS_LCL IS NULL  -- analytics report excludes trailers already ETUP-complete even if they have not gated out yet
     GROUP BY FC_NAME
 ),
 velocity_data AS (
