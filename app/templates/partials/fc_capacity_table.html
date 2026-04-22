@@ -33,9 +33,8 @@
                 <td class="px-6 py-4 whitespace-nowrap text-right font-bold {% if row.wfs_trailers >= 15 %}text-walmart-blue{% else %}text-gray-700{% endif %}">
                     {{ row.wfs_trailers }}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-right">
-                    <div class="font-bold text-gray-900">{{ row.days_to_clear_range_label }}</div>
-                    <div class="text-xs text-gray-500">Plan: {{ row.days_to_clear_planning_label }} @ {{ planning_throughput }}/day</div>
+                <td class="px-6 py-4 whitespace-nowrap text-right font-bold text-gray-900">
+                    {{ row.days_to_clear_range_label }}
                 </td>
             </tr>
             {% endfor %}
