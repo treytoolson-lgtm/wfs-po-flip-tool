@@ -120,7 +120,7 @@ async def lifespan(application: FastAPI):
 
 
 app = FastAPI(
-    title="WFS Escalation + NEW PO Flip Tool",
+    title="WFS Escalation + PO Flip Tool",
     lifespan=lifespan,
 )
 

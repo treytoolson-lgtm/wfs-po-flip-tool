@@ -2,7 +2,7 @@
 # WFS Escalation Tool — startup script (Mac / Linux)
 # Windows users: run these commands manually in your terminal:
 #   .venv\Scripts\activate
-#   uvicorn main:app --port 8765
+#   python -m uvicorn main:app --port 8765
 set -e
 
 cd "$(dirname "$0")"
@@ -27,4 +27,4 @@ fi
 echo "✅ GCloud authenticated"
 echo "🚀 Starting on http://localhost:${APP_PORT:-8766}"
 
-uvicorn main:app --port "${APP_PORT:-8766}"
+".venv/bin/python" -m uvicorn main:app --port "${APP_PORT:-8766}"
