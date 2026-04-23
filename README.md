@@ -81,4 +81,25 @@ Team members access via: **http://<vdi-ip>:8765**
 
 ---
 
+## ⚡ Benchmarking query performance
+
+Use the benchmark helper to time the live BigQuery lookups with real PO numbers:
+
+```bash
+uv run --python .venv/bin/python python scripts/benchmark_queries.py \
+  --escalation-po 6577303WFA \
+  --flip-po 6840158WFA
+```
+
+To compare the current working tree against an older git ref:
+
+```bash
+uv run --python .venv/bin/python python scripts/benchmark_queries.py \
+  --escalation-po 6577303WFA \
+  --flip-po 6840158WFA \
+  --compare-ref HEAD~1
+```
+
+---
+
 ## 🐶 Built with Code Puppy

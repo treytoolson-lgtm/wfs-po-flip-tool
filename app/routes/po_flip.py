@@ -93,18 +93,14 @@ def _get_capacity_with_uph() -> list[dict]:
 
 
 
-def _get_simple_capacity_rows() -> list[dict[str, float | int | str]]:
-    """Return simplified FC rows with throughput-based days-to-clear estimates.
-
-    We show both a range and a planning midpoint because a throughput range is
-    more honest than a fake-precise single number.
-    """
+def _get_fc_trailer_rows() -> list[dict[str, int | str]]:
+    """Return the simple FC Capacity view: FC name + WFS trailer count."""
     rows = []
     for row in get_all_fc_statuses():
         rows.append(
             {
                 "fc_name": row.get("fc_name") or "Unknown",
-                **_build_planning_capacity_fields(row),
+                "wfs_trailers": int(row.get("wfs_on_yard") or 0),
             }
         )
     return sorted(rows, key=lambda row: (-row["wfs_trailers"], row["fc_name"]))
@@ -132,16 +128,13 @@ async def po_flip_page(request: Request):
 @router.get("/fc-capacity", response_class=HTMLResponse)
 async def fc_capacity_page(request: Request):
     if is_capacity_cached():
-        capacity_rows = _get_simple_capacity_rows()
+        capacity_rows = _get_fc_trailer_rows()
         return templates.TemplateResponse(
             "fc_capacity.html",
             {
                 "request": request,
                 "capacity_data": capacity_rows,
                 "total_wfs_trailers": sum(row["wfs_trailers"] for row in capacity_rows),
-                "planning_throughput": WFS_TRAILERS_PER_DAY_PLANNING,
-                "throughput_low": WFS_TRAILERS_PER_DAY_LOW,
-                "throughput_high": WFS_TRAILERS_PER_DAY_HIGH,
             },
         )
     # Cache cold — render shell; HTMX loads data once cache warms
@@ -151,16 +144,13 @@ async def fc_capacity_page(request: Request):
 
 @router.get("/fc-capacity/data", response_class=HTMLResponse)
 async def fc_capacity_data(request: Request):
-    capacity_rows = _get_simple_capacity_rows()
+    capacity_rows = _get_fc_trailer_rows()
     return templates.TemplateResponse(
         "partials/fc_capacity_table.html",
         {
             "request": request,
             "capacity_data": capacity_rows,
             "total_wfs_trailers": sum(row["wfs_trailers"] for row in capacity_rows),
-            "planning_throughput": WFS_TRAILERS_PER_DAY_PLANNING,
-            "throughput_low": WFS_TRAILERS_PER_DAY_LOW,
-            "throughput_high": WFS_TRAILERS_PER_DAY_HIGH,
         },
     )
 
