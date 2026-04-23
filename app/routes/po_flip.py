@@ -93,14 +93,14 @@ def _get_capacity_with_uph() -> list[dict]:
 
 
 
-def _get_fc_trailer_rows() -> list[dict[str, int | str]]:
-    """Return the simple FC Capacity view: FC name + WFS trailer count."""
+def _get_fc_trailer_rows() -> list[dict[str, float | int | str]]:
+    """Return FC rows with WFS trailer count and 10–15 trailers/day clear-time estimate."""
     rows = []
     for row in get_all_fc_statuses():
         rows.append(
             {
                 "fc_name": row.get("fc_name") or "Unknown",
-                "wfs_trailers": int(row.get("wfs_on_yard") or 0),
+                **_build_planning_capacity_fields(row),
             }
         )
     return sorted(rows, key=lambda row: (-row["wfs_trailers"], row["fc_name"]))
@@ -135,6 +135,9 @@ async def fc_capacity_page(request: Request):
                 "request": request,
                 "capacity_data": capacity_rows,
                 "total_wfs_trailers": sum(row["wfs_trailers"] for row in capacity_rows),
+                "planning_throughput": WFS_TRAILERS_PER_DAY_PLANNING,
+                "throughput_low": WFS_TRAILERS_PER_DAY_LOW,
+                "throughput_high": WFS_TRAILERS_PER_DAY_HIGH,
             },
         )
     # Cache cold — render shell; HTMX loads data once cache warms
@@ -151,6 +154,9 @@ async def fc_capacity_data(request: Request):
             "request": request,
             "capacity_data": capacity_rows,
             "total_wfs_trailers": sum(row["wfs_trailers"] for row in capacity_rows),
+            "planning_throughput": WFS_TRAILERS_PER_DAY_PLANNING,
+            "throughput_low": WFS_TRAILERS_PER_DAY_LOW,
+            "throughput_high": WFS_TRAILERS_PER_DAY_HIGH,
         },
     )
 
