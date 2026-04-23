@@ -192,89 +192,133 @@ WITH po_base AS (
     AND p.PO_OWNER = 'WFS'
   GROUP BY p.PO_NUM, p.DELIVERY_NUMBER, p.DC_NUMBER, p.VENDOR_NUM, p.VENDOR_NAME, p.ITEM_ID, p.ITEM_NAME
 ),
+offer_keys AS (
+  SELECT DISTINCT
+    OFFR_ID
+  FROM po_base
+  WHERE OFFR_ID IS NOT NULL
+),
+po_delivery_dc_keys AS (
+  SELECT DISTINCT
+    PO_NUM,
+    DELIVERY_NUMBER,
+    DC_NUMBER
+  FROM po_base
+),
+delivery_dc_keys AS (
+  SELECT DISTINCT
+    DELIVERY_NUMBER,
+    DC_NUMBER
+  FROM po_base
+),
+item_partner_keys AS (
+  SELECT DISTINCT
+    ITEM_ID,
+    CAST(ITEM_ID AS STRING) AS ITEM_ID_STR,
+    PID
+  FROM po_base
+),
+seller_keys AS (
+  SELECT DISTINCT
+    PID
+  FROM po_base
+),
 item_hierarchy AS (
-  -- L3 category — filtered to only our OFFR_IDs + last 90 days of snapshots
-  -- Avoids full table scan of preproc_offer_detl (millions of weekly snapshot rows)
+  -- L3 category — keep same latest-row logic, but only for queried offer ids
   SELECT
     offr_id,
     rpt_lvl_3_nm  AS L3_CATEGORY
   FROM (
     SELECT
-      offr_id,
-      rpt_lvl_3_nm,
-      ROW_NUMBER() OVER (PARTITION BY offr_id ORDER BY rpt_dt DESC) AS rn
-    FROM `wmt-wfs-analytics.WW_MP_DS_MODELS.preproc_offer_detl`
-    WHERE offr_id IN (SELECT DISTINCT OFFR_ID FROM po_base)
-      AND CAST(rpt_dt AS DATE) >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+      p.offr_id,
+      p.rpt_lvl_3_nm,
+      ROW_NUMBER() OVER (PARTITION BY p.offr_id ORDER BY p.rpt_dt DESC) AS rn
+    FROM `wmt-wfs-analytics.WW_MP_DS_MODELS.preproc_offer_detl` p
+    JOIN offer_keys k
+      ON p.offr_id = k.OFFR_ID
+    WHERE p.rpt_dt >= FORMAT_DATE('%F', DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY))
   )
   WHERE rn = 1
 ),
 trailer_info AS (
-  -- Filtered to only deliveries in this query — avoids full ETUP_DC_TRAILERS scan
-  SELECT DISTINCT
-    DELIVERY_NUMBER,
-    DC_NUMBER,
-    ANY_VALUE(TRAILER_ID)                     AS TRAILER_ID,
-    ANY_VALUE(FC_NAME)                        AS FC_NAME,
-    ANY_VALUE(ARRIVAL_TS_LCL)                 AS ARRIVAL_TS_LCL,
-    MAX(FINAL_RANKING)                        AS FINAL_RANKING,
-    ANY_VALUE(UPPER(DELIVERY_TYPE_CODE))      AS DELIVERY_TYPE,
-    ANY_VALUE(DELIVERY_STATUS)                AS DELIVERY_STATUS,
-    MAX(IS_ESCALATION_INSTOCK)                AS IS_ESCALATION_INSTOCK,
-    MAX(ESCALATION_EVENT_WINDOW)              AS ESCALATION_EVENT_WINDOW,
-    ANY_VALUE(ESCALATION_TRAILER_REASON)      AS ESCALATION_TRAILER_REASON,
-    ANY_VALUE(ESCALATION_PO_REASON)           AS ESCALATION_PO_REASON
-  FROM `wmt-cp-prod.e2e_fmt_cp.ETUP_DC_TRAILERS`
-  WHERE DELIVERY_NUMBER IN (SELECT DISTINCT DELIVERY_NUMBER FROM po_base)
-  GROUP BY DELIVERY_NUMBER, DC_NUMBER
+  -- Filtered to only delivery+DC pairs in this query — same join grain as final join
+  SELECT
+    t.DELIVERY_NUMBER,
+    t.DC_NUMBER,
+    ANY_VALUE(t.TRAILER_ID)                   AS TRAILER_ID,
+    ANY_VALUE(t.FC_NAME)                      AS FC_NAME,
+    ANY_VALUE(t.ARRIVAL_TS_LCL)               AS ARRIVAL_TS_LCL,
+    MAX(t.FINAL_RANKING)                      AS FINAL_RANKING,
+    ANY_VALUE(UPPER(t.DELIVERY_TYPE_CODE))    AS DELIVERY_TYPE,
+    ANY_VALUE(t.DELIVERY_STATUS)              AS DELIVERY_STATUS,
+    MAX(t.IS_ESCALATION_INSTOCK)              AS IS_ESCALATION_INSTOCK,
+    MAX(t.ESCALATION_EVENT_WINDOW)            AS ESCALATION_EVENT_WINDOW,
+    ANY_VALUE(t.ESCALATION_TRAILER_REASON)    AS ESCALATION_TRAILER_REASON,
+    ANY_VALUE(t.ESCALATION_PO_REASON)         AS ESCALATION_PO_REASON
+  FROM `wmt-cp-prod.e2e_fmt_cp.ETUP_DC_TRAILERS` t
+  JOIN delivery_dc_keys k
+    ON t.DELIVERY_NUMBER = k.DELIVERY_NUMBER
+   AND t.DC_NUMBER = k.DC_NUMBER
+  GROUP BY t.DELIVERY_NUMBER, t.DC_NUMBER
 ),
 scheduler_info AS (
   -- Get scheduling metadata (ONE row per PO+Delivery+DC)
-  SELECT DISTINCT
-    PO_NUMBER,
-    DELIVERY_NUMBER,
-    CAST(DC_NUMBER AS STRING)                 AS DC_NUMBER,
-    ANY_VALUE(LOAD_TYPE_NAME)                 AS LOAD_TYPE_NAME,
-    ANY_VALUE(APPOINTMENT_DATE)               AS APPOINTMENT_DATE,
-    ANY_VALUE(WM_YR_WK_NBR)                   AS WM_YR_WK_NBR,
-    MAX(IS_LTL)                               AS IS_LTL,
-    ANY_VALUE(INVENTORY_TYPE_NAME)            AS INVENTORY_TYPE_NAME
-  FROM `wmt-wfs-analytics.wfs_ops_analytics.mat_inbound_scheduler_base`
-  WHERE wfs_ind = 1
-  GROUP BY PO_NUMBER, DELIVERY_NUMBER, DC_NUMBER
+  SELECT
+    s.PO_NUMBER,
+    s.DELIVERY_NUMBER,
+    CAST(s.DC_NUMBER AS STRING)               AS DC_NUMBER,
+    ANY_VALUE(s.LOAD_TYPE_NAME)               AS LOAD_TYPE_NAME,
+    ANY_VALUE(s.APPOINTMENT_DATE)             AS APPOINTMENT_DATE,
+    ANY_VALUE(s.WM_YR_WK_NBR)                 AS WM_YR_WK_NBR,
+    MAX(s.IS_LTL)                             AS IS_LTL,
+    ANY_VALUE(s.INVENTORY_TYPE_NAME)          AS INVENTORY_TYPE_NAME
+  FROM `wmt-wfs-analytics.wfs_ops_analytics.mat_inbound_scheduler_base` s
+  JOIN po_delivery_dc_keys k
+    ON s.PO_NUMBER = k.PO_NUM
+   AND s.DELIVERY_NUMBER = k.DELIVERY_NUMBER
+   AND CAST(s.DC_NUMBER AS STRING) = k.DC_NUMBER
+  WHERE s.wfs_ind = 1
+  GROUP BY s.PO_NUMBER, s.DELIVERY_NUMBER, CAST(s.DC_NUMBER AS STRING)
 ),
 events_info AS (
-  -- Event/hero flags per item — L3 removed (only event items are here, use item_hierarchy instead)
-  SELECT DISTINCT
-    CATLG_ITEM_ID,
-    PRTNR_ORG_CD,
-    MAX(HERO_ITEM_IND)                        AS IS_HERO_ITEM,
-    MAX(MOSC_ITEM_IND)                        AS IS_MOSAIC_ITEM,
-    MAX(MINI_EVENT_NM)                        AS EVENT_NAME,
-    MAX(EVENT_ITEM_STATUS_NM)                 AS EVENT_STATUS
-  FROM `wmt-wfs-analytics.inv_ana.events_item_list`
-  GROUP BY CATLG_ITEM_ID, PRTNR_ORG_CD
+  -- Event/hero flags only for queried item+partner pairs
+  SELECT
+    e.CATLG_ITEM_ID,
+    e.PRTNR_ORG_CD,
+    MAX(e.HERO_ITEM_IND)                      AS IS_HERO_ITEM,
+    MAX(e.MOSC_ITEM_IND)                      AS IS_MOSAIC_ITEM,
+    MAX(e.MINI_EVENT_NM)                      AS EVENT_NAME,
+    MAX(e.EVENT_ITEM_STATUS_NM)               AS EVENT_STATUS
+  FROM `wmt-wfs-analytics.inv_ana.events_item_list` e
+  JOIN item_partner_keys k
+    ON e.CATLG_ITEM_ID = k.ITEM_ID
+   AND e.PRTNR_ORG_CD = k.PID
+  GROUP BY e.CATLG_ITEM_ID, e.PRTNR_ORG_CD
 ),
 isr_info AS (
-  -- Filtered to only items in this query — avoids full ISR table scan
-  SELECT DISTINCT
-    catlg_item_id,
-    prtnr_id,
-    MAX(WOS_fcst)                             AS WEEKS_OF_SUPPLY,
-    MAX(hero_flag)                            AS HERO_FLAG_ISR,
-    MAX(ats_qty_current_wk)                   AS ATS_QTY
-  FROM `wmt-wfs-analytics.inv_ana.Inv_ISR_Forward_Looking_copy`
-  WHERE catlg_item_id IN (SELECT DISTINCT CAST(ITEM_ID AS STRING) FROM po_base)
-  GROUP BY catlg_item_id, prtnr_id
+  -- Filtered to only item+partner pairs in this query — avoids broad ISR scans
+  SELECT
+    i.catlg_item_id,
+    i.prtnr_id,
+    MAX(i.WOS_fcst)                           AS WEEKS_OF_SUPPLY,
+    MAX(i.hero_flag)                          AS HERO_FLAG_ISR,
+    MAX(i.ats_qty_current_wk)                 AS ATS_QTY
+  FROM `wmt-wfs-analytics.inv_ana.Inv_ISR_Forward_Looking_copy` i
+  JOIN item_partner_keys k
+    ON i.catlg_item_id = k.ITEM_ID_STR
+   AND i.prtnr_id = k.PID
+  GROUP BY i.catlg_item_id, i.prtnr_id
 ),
 am_info AS (
-  -- Get AM info per seller (deduped)
-  SELECT DISTINCT
-    partner_id,
-    ANY_VALUE(am_name)                        AS AM_NAME,
-    ANY_VALUE(wfs_am_email)                   AS AM_EMAIL
-  FROM `wmt-wfs-analytics.wfs_ops_analytics.mat_mpoa_seller_mart`
-  GROUP BY partner_id
+  -- Get AM info only for sellers in this query
+  SELECT
+    am.partner_id,
+    ANY_VALUE(am.am_name)                     AS AM_NAME,
+    ANY_VALUE(am.wfs_am_email)                AS AM_EMAIL
+  FROM `wmt-wfs-analytics.wfs_ops_analytics.mat_mpoa_seller_mart` am
+  JOIN seller_keys k
+    ON am.partner_id = k.PID
+  GROUP BY am.partner_id
 )
 -- Final join: Each CTE is already deduped, so no cartesian product!
 SELECT
@@ -402,6 +446,36 @@ def query_placed_orders(facility_nm: str, wm_yr_wk_nbr: int) -> dict[str, Any]:
 # ============================================================================
 
 FLIP_QUERY = """
+WITH filtered_i AS (
+  SELECT *
+  FROM `wmt-wfs-analytics.WW_WFS_PROD_TABLES.Inbound_Sandbox`
+  WHERE po_num IN UNNEST(@po_numbers)
+    AND po_status NOT IN ('DELIVERED', 'RECEIVED', 'CANCELLED')
+),
+offer_keys AS (
+  SELECT DISTINCT offr_id
+  FROM filtered_i
+),
+seller_keys AS (
+  SELECT DISTINCT prtnr_id AS seller_id
+  FROM filtered_i
+),
+offer_history AS (
+  SELECT *
+  FROM `wmt-wfs-analytics.WW_MP_DS_MODELS.preproc_offer_detl`
+  WHERE offr_id IN (SELECT offr_id FROM offer_keys)
+    AND rpt_dt >= FORMAT_DATE('%F', DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY))
+),
+am_info AS (
+  SELECT
+    partner_id,
+    ANY_VALUE(diplay_name) AS diplay_name,
+    ANY_VALUE(am_name) AS am_name,
+    ANY_VALUE(wfs_am_email) AS wfs_am_email
+  FROM `wmt-wfs-analytics.wfs_ops_analytics.mat_mpoa_seller_mart`
+  WHERE partner_id IN (SELECT seller_id FROM seller_keys)
+  GROUP BY partner_id
+)
 SELECT
   i.po_num,
   i.prtnr_id AS seller_id,
@@ -412,21 +486,18 @@ SELECT
   i.offr_id AS item_id,
   CASE WHEN i.tot_units > 0 THEN i.tot_units ELSE i.total_qty END AS units,
   i.fc AS current_fc,
-  CAST(i.expctd_dlvry_dt AS DATE) AS expected_delivery_date,
+  i.expctd_dlvry_dt AS expected_delivery_date,
   i.po_status,
-  CAST(i.wm_week_nbr AS INT64) AS wm_week,
+  i.wm_week_nbr AS wm_week,
   i.carrier_nm,
   i.freight_class,
   p.rpt_lvl_3_nm AS l3_category,
   p.price_amt AS price_per_unit
-FROM `wmt-wfs-analytics.WW_WFS_PROD_TABLES.Inbound_Sandbox` i
-LEFT JOIN `wmt-wfs-analytics.WW_MP_DS_MODELS.preproc_offer_detl` p
+FROM filtered_i i
+LEFT JOIN offer_history p
   ON i.offr_id = p.offr_id
-  AND CAST(p.rpt_dt AS DATE) >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
-LEFT JOIN `wmt-wfs-analytics.wfs_ops_analytics.mat_mpoa_seller_mart` am
-  ON CAST(i.prtnr_id AS STRING) = CAST(am.partner_id AS STRING)
-WHERE i.po_num IN UNNEST(@po_numbers)
-  AND i.po_status NOT IN ('DELIVERED', 'RECEIVED', 'CANCELLED')
+LEFT JOIN am_info am
+  ON i.prtnr_id = am.partner_id
 QUALIFY ROW_NUMBER() OVER (PARTITION BY i.offr_id ORDER BY p.rpt_dt DESC) = 1
 ORDER BY i.po_num, i.offr_id
 """
