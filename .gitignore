@@ -24,3 +24,8 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Runtime caches
+*_cache.json
+uph_cache.json
+fc_capacity_cache.json

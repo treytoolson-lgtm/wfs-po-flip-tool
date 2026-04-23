@@ -16,8 +16,8 @@ Access from any browser — hosted on a VDI, used by the whole team.
 | VLOOKUP formulas (Q & R) | ✅ WM Week + Placed Orders auto-calculated |
 | Auto token refresh | ✅ Silent refresh, browser re-auth if needed |
 | SQLite flip tracker | ✅ Local history of all requests |
-| Flip Status Monitor | ✅ Dashboard with scheduled polling |
-| Teams notifications | ✅ Configured (9am/1pm/5pm EST) |
+| Flip Status Monitor | 🚧 Backend kept, UI hidden for now |
+| Teams notifications | 🚧 Backend wiring staged for later |
 
 ---
 
@@ -32,7 +32,7 @@ Access from any browser — hosted on a VDI, used by the whole team.
 
 ```bash
 git clone <repo-url>
-cd wfs-escalation-tool
+cd wfs-po-flip-tool
 uv venv
 source .venv/bin/activate        # Mac/Linux
 .venv\Scripts\activate           # Windows
@@ -78,15 +78,6 @@ Team members access via: **http://<vdi-ip>:8765**
   - If fully expired (~90 days), browser re-auth launches automatically
   - All SharePoint writes appear as whoever ran `/msgraph_auth` on the host machine
 - **Team members** access via browser — no auth needed on their end
-
----
-
-## 📊 Teams Channel
-
-- **Team ID:** `eec3e859-6399-46a1-9d17-78b9421be03c`
-- **Channel ID:** `19:433a8ab43f8744ed9b898e4f356ff76f@thread.tacv2`
-
-[Open in Teams](https://teams.cloud.microsoft/l/channel/19%3A433a8ab43f8744ed9b898e4f356ff76f%40thread.tacv2/alerts?groupId=eec3e859-6399-46a1-9d17-78b9421be03c&tenantId=3cbcc3d3-094d-4006-9849-0d11d61f484d&allowXTenantAccess=False)
 
 ---
 

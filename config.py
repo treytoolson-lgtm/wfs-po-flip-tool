@@ -39,8 +39,8 @@ class Settings(BaseSettings):
     BQ_DATE_WINDOW_DAYS: int = 180
 
     # SharePoint (PO Flip spreadsheet)
-    SHAREPOINT_SITE: str = "https://wal-mart.sharepoint.com/sites/FulfillmentServices"
-    SHAREPOINT_FILE_ID: str = "3412E7C8-7761-4233-B87D-384885821FEE"
+    SHAREPOINT_SITE: str = ""
+    SHAREPOINT_FILE_ID: str = ""
     SHAREPOINT_SHEET: str = "Sheet1"
 
     # Teams (for flip notifications)
